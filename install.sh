@@ -24,29 +24,6 @@ else
     exit 1
 fi
 
-# Install Rust if not present
-if ! command -v cargo >/dev/null 2>&1; then
-    echo "Installing Rust toolchain..."
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-    . "$HOME/.cargo/env"
-fi
-
-# Clone and build
-TMPDIR=$(mktemp -d)
-echo "Building ferrosonic..."
-git clone "$REPO" "$TMPDIR/ferrosonic"
-cd "$TMPDIR/ferrosonic"
-cargo build --release
-
-# Install
-sudo cp target/release/ferrosonic "$INSTALL_DIR/ferrosonic"
-
-# Cleanup
-rm -rf "$TMPDIR"
-
-echo ""
-echo "Ferrosonic installed to $INSTALL_DIR/ferrosonic"
-
 # Optional cava install
 echo ""
 echo "Optional: cava is an audio visualizer that ferrosonic can display"
@@ -70,5 +47,26 @@ else
     echo "Skipping cava. You can install it later and enable it in Settings (F5)."
 fi
 
+# Install Rust if not present
+if ! command -v cargo >/dev/null 2>&1; then
+    echo "Installing Rust toolchain..."
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+    . "$HOME/.cargo/env"
+fi
+
+# Clone and build
+TMPDIR=$(mktemp -d)
+echo "Building ferrosonic..."
+git clone "$REPO" "$TMPDIR/ferrosonic"
+cd "$TMPDIR/ferrosonic"
+cargo build --release
+
+# Install
+sudo cp target/release/ferrosonic "$INSTALL_DIR/ferrosonic"
+
+# Cleanup
+rm -rf "$TMPDIR"
+
 echo ""
+echo "Ferrosonic installed to $INSTALL_DIR/ferrosonic"
 echo "Run 'ferrosonic' to start."
