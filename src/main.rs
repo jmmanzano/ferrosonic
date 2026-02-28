@@ -42,7 +42,7 @@ struct Args {
 /// Initialize file-based logging
 fn init_logging(verbose: bool) -> Option<tracing_appender::non_blocking::WorkerGuard> {
     // Get log directory (same as config dir for consistency with Go version)
-    let log_dir = config_dir().unwrap_or_else(|| PathBuf::from("/tmp"));
+    let log_dir = config_dir().unwrap_or_else(|| std::env::temp_dir());
 
     // Create log directory if needed
     if let Err(e) = fs::create_dir_all(&log_dir) {

@@ -24,8 +24,22 @@ pub fn log_file() -> Option<PathBuf> {
 }
 
 /// Get the MPV socket path
-pub fn mpv_socket_path() -> PathBuf {
-    std::env::temp_dir().join("ferrosonic-mpv.sock")
+/// On Unix: a regular Unix domain socket in the temp directory.
+/// On Windows: a named pipe path (\\.\.\pipe\ferrosonic-mpv).
+pub fn mpv_socket_path() -> std::path::PathBuf {
+    #[cfg(unix)]
+    {
+        std::env::temp_dir().join("ferrosonic-mpv.sock")
+    }
+    #[cfg(windows)]
+    {
+        // MPV on Windows uses a named pipe for IPC
+        std::path::PathBuf::from(r"\\.\pipe\ferrosonic-mpv")
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        std::env::temp_dir().join("ferrosonic-mpv.sock")
+    }
 }
 
 /// Ensure the config directory exists

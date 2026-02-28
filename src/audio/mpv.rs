@@ -1,7 +1,6 @@
 //! MPV controller via JSON IPC
 
 use std::io::{BufRead, BufReader, Write};
-use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -13,6 +12,101 @@ use tracing::{debug, info, trace};
 
 use crate::config::paths::mpv_socket_path;
 use crate::error::AudioError;
+
+// ── Cross-platform IPC socket ─────────────────────────────────────────────────
+
+/// Wraps a platform-specific IPC stream:
+///  - Unix  : UnixStream (domain socket)
+///  - Windows: std::fs::File (named pipe)
+struct IpcStream {
+    #[cfg(unix)]
+    inner: std::os::unix::net::UnixStream,
+    #[cfg(windows)]
+    inner: std::fs::File,
+    /// Fallback for exotic targets (WASM, etc.)
+    #[cfg(not(any(unix, windows)))]
+    inner: std::io::Cursor<Vec<u8>>,
+}
+
+impl IpcStream {
+    fn connect(path: &std::path::Path) -> std::io::Result<Self> {
+        #[cfg(unix)]
+        {
+            use std::os::unix::net::UnixStream;
+            return Ok(Self {
+                inner: UnixStream::connect(path)?,
+            });
+        }
+        #[cfg(windows)]
+        {
+            // MPV on Windows exposes a named pipe, e.g. \\.\pipe\ferrosonic-mpv
+            let file = std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(path)?;
+            return Ok(Self { inner: file });
+        }
+        #[cfg(not(any(unix, windows)))]
+        {
+            let _ = path;
+            Err(std::io::Error::new(
+                std::io::ErrorKind::Unsupported,
+                "IPC not supported on this platform",
+            ))
+        }
+    }
+
+    fn set_read_timeout(&self, timeout: Option<Duration>) -> std::io::Result<()> {
+        #[cfg(unix)]
+        {
+            self.inner.set_read_timeout(timeout)
+        }
+        #[cfg(not(unix))]
+        {
+            // Named-pipe reads on Windows do not expose set_read_timeout on File.
+            // MPV always responds quickly, so blocking reads are acceptable here.
+            let _ = timeout;
+            Ok(())
+        }
+    }
+
+    fn try_clone(&self) -> std::io::Result<Self> {
+        #[cfg(unix)]
+        {
+            return Ok(Self {
+                inner: self.inner.try_clone()?,
+            });
+        }
+        #[cfg(windows)]
+        {
+            return Ok(Self {
+                inner: self.inner.try_clone()?,
+            });
+        }
+        #[cfg(not(any(unix, windows)))]
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "IPC not supported on this platform",
+        ))
+    }
+}
+
+impl std::io::Read for IpcStream {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.inner.read(buf)
+    }
+}
+
+impl std::io::Write for IpcStream {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.inner.write(buf)
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 /// MPV IPC command
 #[derive(Debug, Serialize)]
@@ -52,7 +146,7 @@ pub struct MpvController {
     /// Request ID counter
     request_id: AtomicU64,
     /// Socket connection
-    socket: Option<UnixStream>,
+    socket: Option<IpcStream>,
 }
 
 impl MpvController {
@@ -114,9 +208,9 @@ impl MpvController {
 
     /// Connect to the MPV socket
     fn connect(&mut self) -> Result<(), AudioError> {
-        let stream = UnixStream::connect(&self.socket_path).map_err(AudioError::MpvSocket)?;
+        let stream = IpcStream::connect(&self.socket_path).map_err(AudioError::MpvSocket)?;
 
-        // Set read timeout
+        // Set read timeout (no-op on Windows, 100ms on Unix)
         stream
             .set_read_timeout(Some(Duration::from_millis(100)))
             .map_err(AudioError::MpvSocket)?;

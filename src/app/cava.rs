@@ -1,6 +1,8 @@
 use std::io::Read as _;
+#[cfg(unix)]
 use std::os::unix::io::FromRawFd;
 
+#[cfg(unix)]
 use tracing::{error, info};
 
 use super::*;
@@ -8,6 +10,8 @@ use super::*;
 impl App {
     /// Start cava process in noncurses mode via a pty
     pub(super) fn start_cava(&mut self, cava_gradient: &[String; 8], cava_horizontal_gradient: &[String; 8], cava_size: u32) {
+        #[cfg(unix)]
+        {
         self.stop_cava();
 
         // Compute pty dimensions to match the cava widget area
@@ -82,6 +86,13 @@ impl App {
                     libc::close(master);
                 }
             }
+        }
+        } // end #[cfg(unix)]
+        #[cfg(not(unix))]
+        {
+            // cava is not available on non-Unix platforms
+            let _ = (cava_gradient, cava_horizontal_gradient, cava_size);
+            tracing::warn!("cava is not supported on this platform");
         }
     }
 
@@ -183,6 +194,7 @@ fn vt100_color_to_cava(color: vt100::Color) -> CavaColor {
 }
 
 /// Generate a cava configuration string with theme-appropriate gradient colors
+#[cfg(unix)]
 pub(super) fn generate_cava_config(g: &[String; 8], h: &[String; 8]) -> String {
 
     format!(

@@ -161,7 +161,8 @@ impl App {
             }
         }
 
-        // Update MPRIS properties to keep external clients in sync
+        // Update MPRIS properties to keep external clients in sync (Unix only)
+        #[cfg(unix)]
         if let Some(ref server) = self.mpris_server {
             if let Err(e) = update_mpris_properties(server, &self.state).await {
                 debug!("Failed to update MPRIS properties: {}", e);

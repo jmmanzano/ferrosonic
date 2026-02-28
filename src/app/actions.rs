@@ -2,6 +2,7 @@
 
 /// Actions that can be sent to the audio backend
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum AudioAction {
     /// Pause playback
     Pause,

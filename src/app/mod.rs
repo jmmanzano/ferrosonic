@@ -30,6 +30,7 @@ use crate::audio::mpv::MpvController;
 use crate::audio::pipewire::PipeWireController;
 use crate::config::Config;
 use crate::error::{Error, UiError};
+#[cfg(unix)]
 use crate::mpris::server::{start_mpris_server, update_mpris_properties, MprisPlayer};
 use crate::subsonic::SubsonicClient;
 use crate::ui;
@@ -51,6 +52,7 @@ pub struct App {
     /// PipeWire sample rate controller
     pipewire: PipeWireController,
     /// Channel to send audio actions
+    #[allow(dead_code)]
     audio_tx: mpsc::Sender<AudioAction>,
     /// Cava child process
     cava_process: Option<std::process::Child>,
@@ -62,7 +64,8 @@ pub struct App {
     last_click: Option<(u16, u16, std::time::Instant)>,
     /// Channel to receive audio actions (from MPRIS)
     audio_rx: mpsc::Receiver<AudioAction>,
-    /// MPRIS D-Bus server
+    /// MPRIS D-Bus server (Unix / D-Bus only)
+    #[cfg(unix)]
     mpris_server: Option<mpris_server::Server<MprisPlayer>>,
 }
 
@@ -96,6 +99,7 @@ impl App {
             cava_parser: None,
             last_click: None,
             audio_rx,
+            #[cfg(unix)]
             mpris_server: None,
         }
     }
@@ -112,7 +116,8 @@ impl App {
             info!("MPV started successfully, ready for playback");
         }
 
-        // Start MPRIS server for media key support
+        // Start MPRIS server for media key support (Unix / D-Bus only)
+        #[cfg(unix)]
         match start_mpris_server(self.state.clone(), self.audio_tx.clone()).await {
             Ok(server) => {
                 info!("MPRIS server started");
@@ -136,7 +141,8 @@ impl App {
             state.settings_state.set_theme_by_name(&theme_name);
         }
 
-        // Check if cava is available
+        // Check if cava is available (Unix only — cava is not available on Windows)
+        #[cfg(unix)]
         let cava_available = std::process::Command::new("which")
             .arg("cava")
             .stdout(std::process::Stdio::null())
@@ -144,6 +150,8 @@ impl App {
             .status()
             .map(|s| s.success())
             .unwrap_or(false);
+        #[cfg(not(unix))]
+        let cava_available = false;
 
         {
             let mut state = self.state.write().await;

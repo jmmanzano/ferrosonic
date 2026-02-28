@@ -27,13 +27,6 @@ toml = "0.8"
 thiserror = "2"
 anyhow = "1"
 
-# D-Bus / MPRIS
-zbus = "5"
-mpris-server = "0.8"
-
-# Unix utilities
-libc = "0.2"
-
 # Utilities
 dirs = "6"
 url = "2"
@@ -60,6 +53,24 @@ vt100 = "0.15"
 lto = true
 codegen-units = 1
 strip = true
+
+# ----- Unix-only dependencies -----
+[target.'cfg(unix)'.dependencies]
+# D-Bus / MPRIS (Linux/macOS via D-Bus)
+zbus = "5"
+mpris-server = "0.8"
+# Unix system calls (openpty, fcntl, etc.)
+libc = "0.2"
+
+# ----- Windows-only dependencies -----
+[target.'cfg(windows)'.dependencies]
+# Named pipe + Win32 API access for MPV IPC
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Pipes",
+    "Win32_System_IO",
+] }
 
 [dev-dependencies]
 tempfile = "3.24.0"
