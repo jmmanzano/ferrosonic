@@ -11,9 +11,11 @@ Ferrosonic is inspired by [Termsonic](https://git.sixfoisneuf.fr/termsonic/about
 - **MPRIS2 integration** - Full desktop media control support (play, pause, stop, next, previous, seek)
 - **Artist/album browser** - Tree-based navigation with expandable artists and album listings
 - **Playlist support** - Browse and play server playlists with shuffle capability
+- **Internet radio** - Browse and play internet radio stations configured on your Subsonic server
 - **Play queue management** - Add, remove, reorder, shuffle, and clear queue history
 - **Audio quality display** - Real-time display of sample rate, bit depth, codec format, and channel layout
-- **Audio visualizer** - Integrated cava audio visualizer with theme-matched gradient colors
+- **Audio backend selection** - Choose between MPV and FFmpeg audio backends
+- **Audio visualizer** - Integrated cava audio visualizer with theme-matched gradient colors and adjustable size
 - **13 built-in themes** - Default, Monokai, Dracula, Nord, Gruvbox, Catppuccin, Solarized, Tokyo Night, Rosé Pine, Everforest, Kanagawa, One Dark, and Ayu Dark
 - **Custom themes** - Create your own themes as TOML files in `~/.config/ferrosonic/themes/`
 - **Mouse support** - Clickable buttons, tabs, lists, and progress bar seeking
@@ -33,7 +35,8 @@ Ferrosonic requires the following at runtime:
 
 | Dependency | Purpose | Required |
 |---|---|---|
-| **mpv** | Audio playback engine (via JSON IPC) | Yes |
+| **mpv** | Audio playback engine (via JSON IPC) | Yes (default backend) |
+| **ffmpeg** | Alternative audio playback engine | Optional (alternative backend) |
 | **PipeWire** | Automatic sample rate switching for bit-perfect audio | Recommended |
 | **WirePlumber** | PipeWire session manager | Recommended |
 | **D-Bus** | MPRIS2 desktop media controls | Recommended |
@@ -73,13 +76,16 @@ ferrosonic -v
 
 ## Configuration
 
-Configuration is stored at `~/.config/ferrosonic/config.toml`. You can edit it manually or configure the server connection through the application's Server page (F4).
+Configuration is stored at `~/.config/ferrosonic/config.toml`. You can edit it manually or configure the server connection through the application's Server page (F5).
 
 ```toml
 BaseURL = "https://your-subsonic-server.com"
 Username = "your-username"
 Password = "your-password"
 Theme = "Default"
+Cava = false
+CavaSize = 40
+AudioBackend = "mpv"
 ```
 
 | Field | Description |
@@ -88,6 +94,9 @@ Theme = "Default"
 | `Username` | Your server username |
 | `Password` | Your server password |
 | `Theme` | Color theme name (e.g. `Default`, `Catppuccin`, `Tokyo Night`) |
+| `Cava` | Enable cava audio visualizer (`true` / `false`) |
+| `CavaSize` | Cava visualizer height percentage (10–80, step 5, default 40) |
+| `AudioBackend` | Audio playback backend (`mpv` or `ffmpeg`) |
 
 Logs are written to `~/.config/ferrosonic/ferrosonic.log`.
 
@@ -106,15 +115,17 @@ Logs are written to `~/.config/ferrosonic/ferrosonic.log`.
 | `F1` | Artists page |
 | `F2` | Queue page |
 | `F3` | Playlists page |
-| `F4` | Server configuration page |
-| `F5` | Settings page |
+| `F4` | Radio page |
+| `F5` | Server configuration page |
+| `F6` | Settings page |
 
 ### Artists Page (F1)
 
 | Key | Action |
 |---|---|
 | `/` | Filter artists by name |
-| `Esc` | Clear filter |
+| `Esc` | Clear filter / collapse all artists |
+| `Tab` | Cycle focus between tree and song list |
 | `Up` / `k` | Move selection up |
 | `Down` / `j` | Move selection down |
 | `Left` / `Right` | Switch focus between tree and song list |
@@ -148,23 +159,33 @@ Logs are written to `~/.config/ferrosonic/ferrosonic.log`.
 | `n` | Add selected song as next in queue |
 | `r` | Shuffle play all songs in selected playlist |
 
-### Server Page (F4)
+### Radio Page (F4)
 
 | Key | Action |
 |---|---|
-| `Tab` | Move between fields |
+| `Up` / `k` | Move selection up |
+| `Down` / `j` | Move selection down |
+| `Enter` | Play selected radio station |
+| `s` | Stop radio playback |
+
+### Server Page (F5)
+
+| Key | Action |
+|---|---|
+| `Up` / `Down` | Navigate between fields |
+| `Tab` | Move to next field (wraps around) |
 | `Enter` | Test connection or Save configuration |
 | `Backspace` | Delete character in text field |
 
-### Settings Page (F5)
+### Settings Page (F6)
 
 | Key | Action |
 |---|---|
-| `Up` / `Down` | Move between settings |
-| `Left` | Previous option |
-| `Right` / `Enter` | Next option |
+| `Up` / `Down` / `k` / `j` | Move between settings |
+| `Left` / `h` | Previous option |
+| `Right` / `l` / `Enter` / `Space` | Next option |
 
-Settings include theme selection and cava visualizer toggle. Changes are saved automatically.
+Settings include theme selection, cava visualizer toggle, cava size adjustment, and audio backend selection (MPV / FFmpeg). Changes are saved automatically.
 
 ## Mouse Support
 
@@ -210,7 +231,7 @@ Ferrosonic ships with 13 themes. On first run, the built-in themes are written a
 | **One Dark** | Atom One Dark color scheme |
 | **Ayu Dark** | Ayu Dark color scheme |
 
-Change themes with `t` from any page, from the Settings page (F5), or by editing the `Theme` field in `config.toml`.
+Change themes with `t` from any page, from the Settings page (F6), or by editing the `Theme` field in `config.toml`.
 
 ### Custom Themes
 
