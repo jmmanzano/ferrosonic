@@ -36,6 +36,8 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
         Constraint::Length(2), // Cava toggle
         Constraint::Length(1), // Spacing
         Constraint::Length(2), // Cava size
+        Constraint::Length(1), // Spacing
+        Constraint::Length(2), // Audio backend
         Constraint::Min(1),    // Remaining space
     ])
     .split(inner);
@@ -84,6 +86,16 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
         &colors,
     );
 
+    // Audio backend (field 3)
+    render_option(
+        frame,
+        chunks[7],
+        "Audio Backend",
+        settings.audio_backend.label(),
+        settings.selected_field == 3,
+        &colors,
+    );
+
     // Help text at bottom
     let help_text = match settings.selected_field {
         0 => "← → or Enter to change theme (auto-saves)",
@@ -91,6 +103,7 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
         1 => "cava is not installed on this system",
         2 if state.cava_available => "← → to adjust cava size (10%-80%, auto-saves)",
         2 => "cava is not installed on this system",
+        3 => "← → or Enter to switch audio backend: MPV or FFmpeg (auto-saves, restart required)",
         _ => "",
     };
     let help = Paragraph::new(help_text).style(Style::default().fg(colors.muted));

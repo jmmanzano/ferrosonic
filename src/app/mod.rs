@@ -6,6 +6,7 @@ mod input;
 mod input_artists;
 mod input_playlists;
 mod input_queue;
+mod input_radio;
 mod input_server;
 mod input_settings;
 mod mouse;
@@ -26,6 +27,7 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 
+use crate::audio::ffmpeg::FfmpegController;
 use crate::audio::mpv::MpvController;
 use crate::audio::pipewire::PipeWireController;
 use crate::config::Config;
@@ -49,6 +51,8 @@ pub struct App {
     subsonic: Option<SubsonicClient>,
     /// MPV audio controller
     mpv: MpvController,
+    /// FFmpeg audio controller
+    ffmpeg: FfmpegController,
     /// PipeWire sample rate controller
     pipewire: PipeWireController,
     /// Channel to send audio actions
@@ -62,6 +66,8 @@ pub struct App {
     cava_parser: Option<vt100::Parser>,
     /// Last mouse click position and time (for second-click detection)
     last_click: Option<(u16, u16, std::time::Instant)>,
+    /// Whether to use FFmpeg backend instead of MPV
+    use_ffmpeg_backend: bool,
     /// Channel to receive audio actions (from MPRIS)
     audio_rx: mpsc::Receiver<AudioAction>,
     /// MPRIS D-Bus server (Unix / D-Bus only)
@@ -92,12 +98,14 @@ impl App {
             state,
             subsonic,
             mpv: MpvController::new(),
+            ffmpeg: FfmpegController::new(),
             pipewire: PipeWireController::new(),
             audio_tx,
             cava_process: None,
             cava_pty_master: None,
             cava_parser: None,
             last_click: None,
+            use_ffmpeg_backend: false,
             audio_rx,
             #[cfg(unix)]
             mpris_server: None,
@@ -106,14 +114,46 @@ impl App {
 
     /// Run the application
     pub async fn run(&mut self) -> Result<(), Error> {
-        // Start MPV
-        if let Err(e) = self.mpv.start() {
-            warn!("Failed to start MPV: {} - audio playback won't work", e);
-            let mut state = self.state.write().await;
-            state.notify_error(format!("Failed to start MPV: {}. Is mpv installed?", e));
-            drop(state);
+        // Start audio backend based on config
+        let use_ffmpeg = {
+            let state = self.state.read().await;
+            state.settings_state.audio_backend == AudioBackend::Ffmpeg
+        };
+        self.use_ffmpeg_backend = use_ffmpeg;
+
+        if use_ffmpeg {
+            if FfmpegController::check_available() {
+                if let Err(e) = self.ffmpeg.start() {
+                    warn!("Failed to start FFmpeg backend: {} - trying MPV", e);
+                    let mut state = self.state.write().await;
+                    state.notify_error(format!("FFmpeg error: {}. Falling back to MPV.", e));
+                    drop(state);
+                    // Fallback to MPV
+                    if let Err(e) = self.mpv.start() {
+                        warn!("Failed to start MPV: {}", e);
+                    }
+                } else {
+                    info!("FFmpeg audio backend started successfully");
+                }
+            } else {
+                warn!("FFmpeg not found, falling back to MPV");
+                let mut state = self.state.write().await;
+                state.notify_error("FFmpeg not found. Using MPV instead.");
+                state.settings_state.audio_backend = AudioBackend::Mpv;
+                drop(state);
+                if let Err(e) = self.mpv.start() {
+                    warn!("Failed to start MPV: {}", e);
+                }
+            }
         } else {
-            info!("MPV started successfully, ready for playback");
+            if let Err(e) = self.mpv.start() {
+                warn!("Failed to start MPV: {} - audio playback won't work", e);
+                let mut state = self.state.write().await;
+                state.notify_error(format!("Failed to start MPV: {}. Is mpv installed?", e));
+                drop(state);
+            } else {
+                info!("MPV started successfully, ready for playback");
+            }
         }
 
         // Start MPRIS server for media key support (Unix / D-Bus only)
@@ -195,8 +235,9 @@ impl App {
         // Cleanup cava
         self.stop_cava();
 
-        // Cleanup MPV
+        // Cleanup audio backends
         let _ = self.mpv.quit();
+        let _ = self.ffmpeg.quit();
 
         // Cleanup terminal
         disable_raw_mode().map_err(UiError::TerminalInit)?;
@@ -245,6 +286,22 @@ impl App {
                 Err(e) => {
                     error!("Failed to load playlists: {}", e);
                     // Don't show error for playlists if artists loaded
+                }
+            }
+
+            // Load internet radio stations
+            match client.get_internet_radio_stations().await {
+                Ok(stations) => {
+                    let mut state = self.state.write().await;
+                    let count = stations.len();
+                    if count > 0 {
+                        state.radio.selected = Some(0);
+                    }
+                    state.radio.stations = stations;
+                    info!("Loaded {} radio stations", count);
+                }
+                Err(e) => {
+                    error!("Failed to load radio stations: {}", e);
                 }
             }
         }
@@ -298,7 +355,7 @@ impl App {
                     AudioAction::Previous => { let _ = self.prev_track().await; }
                     AudioAction::Stop => { let _ = self.stop_playback().await; }
                     AudioAction::Seek(pos) => {
-                        if let Err(e) = self.mpv.seek(pos) {
+                        if let Err(e) = self.audio_seek(pos) {
                             warn!("MPRIS seek failed: {}", e);
                         } else {
                             let mut state = self.state.write().await;
@@ -306,10 +363,10 @@ impl App {
                         }
                     }
                     AudioAction::SeekRelative(offset) => {
-                        let _ = self.mpv.seek_relative(offset);
+                        let _ = self.audio_seek_relative(offset);
                     }
                     AudioAction::SetVolume(vol) => {
-                        let _ = self.mpv.set_volume(vol);
+                        let _ = self.audio_set_volume(vol);
                     }
                 }
             }

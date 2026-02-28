@@ -41,6 +41,7 @@ impl Widget for Header {
         let titles: Vec<Line> = [Page::Artists,
             Page::Queue,
             Page::Playlists,
+            Page::Radio,
             Page::Server,
             Page::Settings]
         .iter()
@@ -116,6 +117,7 @@ impl Header {
                 Page::Artists,
                 Page::Queue,
                 Page::Playlists,
+                Page::Radio,
                 Page::Server,
                 Page::Settings,
             ];

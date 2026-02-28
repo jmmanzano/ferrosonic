@@ -21,7 +21,7 @@ impl App {
                     }
                 }
                 KeyCode::Down | KeyCode::Char('j') => {
-                    if field < 2 {
+                    if field < 3 {
                         state.settings_state.selected_field = field + 1;
                     }
                 }
@@ -55,6 +55,16 @@ impl App {
                             config_changed = true;
                         }
                     }
+                    3 => {
+                        let new_backend = state.settings_state.audio_backend.toggle();
+                        state.settings_state.audio_backend = new_backend;
+                        state.config.audio_backend = match new_backend {
+                            AudioBackend::Ffmpeg => "ffmpeg".to_string(),
+                            AudioBackend::Mpv => "mpv".to_string(),
+                        };
+                        state.notify(format!("Audio Backend: {} (restart required)", new_backend.label()));
+                        config_changed = true;
+                    }
                     _ => {}
                 },
                 // Right / Enter / Space
@@ -87,6 +97,16 @@ impl App {
                                 state.notify(format!("Cava Size: {}%", new_size));
                                 config_changed = true;
                             }
+                        }
+                        3 => {
+                            let new_backend = state.settings_state.audio_backend.toggle();
+                            state.settings_state.audio_backend = new_backend;
+                            state.config.audio_backend = match new_backend {
+                                AudioBackend::Ffmpeg => "ffmpeg".to_string(),
+                                AudioBackend::Mpv => "mpv".to_string(),
+                            };
+                            state.notify(format!("Audio Backend: {} (restart required)", new_backend.label()));
+                            config_changed = true;
                         }
                         _ => {}
                     }

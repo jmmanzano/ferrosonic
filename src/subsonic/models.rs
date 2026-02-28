@@ -215,6 +215,30 @@ pub struct PlaylistDetail {
     pub entry: Vec<Child>,
 }
 
+/// Internet Radio Station
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InternetRadioStation {
+    pub id: String,
+    pub name: String,
+    #[serde(rename = "streamUrl")]
+    pub stream_url: String,
+    #[serde(default, rename = "homePageUrl")]
+    pub home_page_url: Option<String>,
+}
+
+/// Internet Radio Stations response
+#[derive(Debug, Deserialize)]
+pub struct InternetRadioStationsData {
+    #[serde(rename = "internetRadioStations")]
+    pub internet_radio_stations: InternetRadioStationsInner,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct InternetRadioStationsInner {
+    #[serde(default, rename = "internetRadioStation")]
+    pub internet_radio_station: Vec<InternetRadioStation>,
+}
+
 /// Ping response (for testing connection)
 #[derive(Debug, Deserialize)]
 pub struct PingData {}

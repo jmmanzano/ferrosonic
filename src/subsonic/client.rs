@@ -281,6 +281,13 @@ impl SubsonicClient {
     /// Get stream URL for a song
     ///
     /// Returns the full URL with authentication that can be passed to MPV
+    pub async fn get_internet_radio_stations(&self) -> Result<Vec<InternetRadioStation>, SubsonicError> {
+        let data: InternetRadioStationsData = self.request("getInternetRadioStations").await?;
+        let stations = data.internet_radio_stations.internet_radio_station;
+        debug!("Fetched {} internet radio stations", stations.len());
+        Ok(stations)
+    }
+
     pub fn get_stream_url(&self, song_id: &str) -> Result<String, SubsonicError> {
         let mut url = self.base_url.join("rest/stream")?;
 

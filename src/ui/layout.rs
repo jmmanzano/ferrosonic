@@ -90,6 +90,9 @@ pub fn draw(frame: &mut Frame, state: &mut AppState) {
         Page::Playlists => {
             pages::playlists::render(frame, content_area, state);
         }
+        Page::Radio => {
+            pages::radio::render(frame, content_area, state);
+        }
         Page::Server => {
             pages::server::render(frame, content_area, state);
         }

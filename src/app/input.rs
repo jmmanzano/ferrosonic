@@ -79,10 +79,14 @@ impl App {
                 return Ok(());
             }
             (KeyCode::F(4), _) => {
-                state.page = Page::Server;
+                state.page = Page::Radio;
                 return Ok(());
             }
             (KeyCode::F(5), _) => {
+                state.page = Page::Server;
+                return Ok(());
+            }
+            (KeyCode::F(6), _) => {
                 state.page = Page::Settings;
                 return Ok(());
             }
@@ -139,6 +143,7 @@ impl App {
             Page::Artists => self.handle_artists_key(key).await,
             Page::Queue => self.handle_queue_key(key).await,
             Page::Playlists => self.handle_playlists_key(key).await,
+            Page::Radio => self.handle_radio_key(key).await,
             Page::Server => self.handle_server_key(key).await,
             Page::Settings => self.handle_settings_key(key).await,
         }

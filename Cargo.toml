@@ -49,6 +49,9 @@ futures = "0.3"
 # Terminal emulator for cava integration
 vt100 = "0.15"
 
+# Audio output (FFmpeg backend)
+rodio = "0.19"
+
 [profile.release]
 lto = true
 codegen-units = 1

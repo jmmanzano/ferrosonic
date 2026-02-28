@@ -105,8 +105,32 @@ impl App {
             Page::Artists => self.handle_artists_click(x, y, layout).await,
             Page::Queue => self.handle_queue_click(y, layout).await,
             Page::Playlists => self.handle_playlists_click(x, y, layout).await,
+            Page::Radio => self.handle_radio_click(y, layout).await,
             _ => Ok(()),
         }
+    }
+
+    /// Handle click on radio page
+    async fn handle_radio_click(&mut self, y: u16, layout: &LayoutAreas) -> Result<(), Error> {
+        let mut state = self.state.write().await;
+        let content = layout.content;
+        let row_in_viewport = y.saturating_sub(content.y + 1) as usize;
+        let item_index = state.radio.scroll_offset + row_in_viewport;
+        if item_index < state.radio.stations.len() {
+            let was_selected = state.radio.selected == Some(item_index);
+            state.radio.selected = Some(item_index);
+            let is_second_click = was_selected
+                && self.last_click.is_some_and(|(_, ly, t)| ly == y && t.elapsed().as_millis() < 500);
+            if is_second_click {
+                if let Some(station) = state.radio.stations.get(item_index).cloned() {
+                    drop(state);
+                    self.last_click = Some((0, y, std::time::Instant::now()));
+                    return self.play_radio_station(&station).await;
+                }
+            }
+        }
+        self.last_click = Some((0, y, std::time::Instant::now()));
+        Ok(())
     }
 
     /// Handle click on queue page
@@ -177,6 +201,15 @@ impl App {
                     }
                 }
             }
+            Page::Radio => {
+                if let Some(sel) = state.radio.selected {
+                    if sel > 0 {
+                        state.radio.selected = Some(sel - 1);
+                    }
+                } else if !state.radio.stations.is_empty() {
+                    state.radio.selected = Some(0);
+                }
+            }
             _ => {}
         }
         Ok(())
@@ -237,6 +270,16 @@ impl App {
                     } else if !state.playlists.songs.is_empty() {
                         state.playlists.selected_song = Some(0);
                     }
+                }
+            }
+            Page::Radio => {
+                let max = state.radio.stations.len().saturating_sub(1);
+                if let Some(sel) = state.radio.selected {
+                    if sel < max {
+                        state.radio.selected = Some(sel + 1);
+                    }
+                } else if !state.radio.stations.is_empty() {
+                    state.radio.selected = Some(0);
                 }
             }
             _ => {}

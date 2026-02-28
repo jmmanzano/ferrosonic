@@ -7,7 +7,7 @@ use tokio::sync::RwLock;
 use ratatui::layout::Rect;
 
 use crate::config::Config;
-use crate::subsonic::models::{Album, Artist, Child, Playlist};
+use crate::subsonic::models::{Album, Artist, Child, InternetRadioStation, Playlist};
 use crate::ui::theme::{ThemeColors, ThemeData};
 
 /// Current page in the application
@@ -17,6 +17,7 @@ pub enum Page {
     Artists,
     Queue,
     Playlists,
+    Radio,
     Server,
     Settings,
 }
@@ -27,17 +28,18 @@ impl Page {
             Page::Artists => 0,
             Page::Queue => 1,
             Page::Playlists => 2,
-            Page::Server => 3,
-            Page::Settings => 4,
+            Page::Radio => 3,
+            Page::Server => 4,
+            Page::Settings => 5,
         }
     }
-
 
     pub fn label(&self) -> &'static str {
         match self {
             Page::Artists => "Artists",
             Page::Queue => "Queue",
             Page::Playlists => "Playlists",
+            Page::Radio => "Radio",
             Page::Server => "Server",
             Page::Settings => "Settings",
         }
@@ -48,8 +50,9 @@ impl Page {
             Page::Artists => "F1",
             Page::Queue => "F2",
             Page::Playlists => "F3",
-            Page::Server => "F4",
-            Page::Settings => "F5",
+            Page::Radio => "F4",
+            Page::Server => "F5",
+            Page::Settings => "F6",
         }
     }
 }
@@ -171,6 +174,37 @@ pub struct PlaylistsState {
     pub song_scroll_offset: usize,
 }
 
+/// Radio page state
+#[derive(Debug, Clone, Default)]
+pub struct RadioState {
+    pub stations: Vec<InternetRadioStation>,
+    pub selected: Option<usize>,
+    pub scroll_offset: usize,
+}
+
+/// Audio backend selection
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AudioBackend {
+    #[default]
+    Mpv,
+    Ffmpeg,
+}
+
+impl AudioBackend {
+    pub fn label(&self) -> &'static str {
+        match self {
+            AudioBackend::Mpv => "MPV",
+            AudioBackend::Ffmpeg => "FFmpeg",
+        }
+    }
+    pub fn toggle(&self) -> Self {
+        match self {
+            AudioBackend::Mpv => AudioBackend::Ffmpeg,
+            AudioBackend::Ffmpeg => AudioBackend::Mpv,
+        }
+    }
+}
+
 /// Server page state (connection settings)
 #[derive(Debug, Clone, Default)]
 pub struct ServerState {
@@ -187,7 +221,7 @@ pub struct ServerState {
 /// Settings page state
 #[derive(Debug, Clone)]
 pub struct SettingsState {
-    /// Currently focused field (0=Theme, 1=Cava)
+    /// Currently focused field (0=Theme, 1=Cava, 2=CavaSize, 3=AudioBackend)
     pub selected_field: usize,
     /// Available themes (Default + loaded from files)
     pub themes: Vec<ThemeData>,
@@ -197,6 +231,8 @@ pub struct SettingsState {
     pub cava_enabled: bool,
     /// Cava visualizer height percentage (10-80, step 5)
     pub cava_size: u8,
+    /// Audio backend
+    pub audio_backend: AudioBackend,
 }
 
 impl Default for SettingsState {
@@ -207,6 +243,7 @@ impl Default for SettingsState {
             theme_index: 0,
             cava_enabled: false,
             cava_size: 40,
+            audio_backend: AudioBackend::default(),
         }
     }
 }
@@ -289,6 +326,8 @@ pub struct AppState {
     pub queue_state: QueueState,
     /// Playlists page state
     pub playlists: PlaylistsState,
+    /// Radio page state
+    pub radio: RadioState,
     /// Server page state (connection settings)
     pub server_state: ServerState,
     /// Settings page state (app preferences)
@@ -303,6 +342,8 @@ pub struct AppState {
     pub cava_available: bool,
     /// Cached layout areas from last render (for mouse hit-testing)
     pub layout: LayoutAreas,
+    /// Whether currently playing a radio stream (no queue)
+    pub playing_radio: bool,
 }
 
 /// A row of styled segments from cava's terminal output
@@ -330,6 +371,10 @@ pub enum CavaColor {
 
 impl AppState {
     pub fn new(config: Config) -> Self {
+        let audio_backend = match config.audio_backend.as_str() {
+            "ffmpeg" => AudioBackend::Ffmpeg,
+            _ => AudioBackend::Mpv,
+        };
         let mut state = Self {
             config: config.clone(),
             ..Default::default()
@@ -341,6 +386,7 @@ impl AppState {
         // Initialize cava from config
         state.settings_state.cava_enabled = config.cava;
         state.settings_state.cava_size = config.cava_size.clamp(10, 80);
+        state.settings_state.audio_backend = audio_backend;
         state
     }
 
