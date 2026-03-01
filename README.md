@@ -7,14 +7,14 @@ Ferrosonic is inspired by [Termsonic](https://git.sixfoisneuf.fr/termsonic/about
 ## Features
 
 - **Bit-perfect audio** - Automatic PipeWire sample rate switching to match the source material (44.1kHz, 48kHz, 96kHz, 192kHz, etc.)
-- **Gapless playback** - Seamless transitions between tracks with pre-buffered next track
+- **Gapless playback (MPV backend)** - Seamless transitions between tracks with pre-buffered next track
 - **MPRIS2 integration** - Full desktop media control support (play, pause, stop, next, previous, seek)
 - **Artist/album browser** - Tree-based navigation with expandable artists and album listings
 - **Playlist support** - Browse and play server playlists with shuffle capability
 - **Internet radio** - Browse and play internet radio stations configured on your Subsonic server
 - **Play queue management** - Add, remove, reorder, shuffle, and clear queue history
 - **Audio quality display** - Real-time display of sample rate, bit depth, codec format, and channel layout
-- **Audio backend selection** - Choose between MPV and FFmpeg audio backends
+- **Audio backend selection** - Choose between MPV and FFmpeg+CPAL audio backends
 - **Audio visualizer** - Integrated cava audio visualizer with theme-matched gradient colors and adjustable size
 - **13 built-in themes** - Default, Monokai, Dracula, Nord, Gruvbox, Catppuccin, Solarized, Tokyo Night, Rosé Pine, Everforest, Kanagawa, One Dark, and Ayu Dark
 - **Custom themes** - Create your own themes as TOML files in `~/.config/ferrosonic/themes/`
@@ -36,7 +36,7 @@ Ferrosonic requires the following at runtime:
 | Dependency | Purpose | Required |
 |---|---|---|
 | **mpv** | Audio playback engine (via JSON IPC) | Yes (default backend) |
-| **ffmpeg** | Alternative audio playback engine | Optional (alternative backend) |
+| **ffmpeg** | Decoder for FFmpeg audio backend | Optional (alternative backend) |
 | **PipeWire** | Automatic sample rate switching for bit-perfect audio | Recommended |
 | **WirePlumber** | PipeWire session manager | Recommended |
 | **D-Bus** | MPRIS2 desktop media controls | Recommended |
@@ -196,13 +196,25 @@ Settings include theme selection, cava visualizer toggle, cava size adjustment, 
 
 ## Audio Features
 
+### Audio Backends
+
+Ferrosonic supports two playback backends:
+
+- **MPV (default, recommended for music queue/albums)**
+	- Best behavior for queue navigation and gapless playback.
+	- Full playlist-style transitions.
+- **FFmpeg + CPAL (recommended for direct stream/radio use cases)**
+	- Uses FFmpeg for decoding and CPAL for direct audio output.
+	- Optimized buffering for live/continuous streams.
+	- Does not currently provide MPV-style gapless playlist preloading.
+
 ### Bit-Perfect Playback
 
 Ferrosonic uses PipeWire's `pw-metadata` to automatically switch the system sample rate to match the source material. When a track at 96kHz starts playing, PipeWire is instructed to output at 96kHz, avoiding unnecessary resampling. The original sample rate is restored when the application exits.
 
 ### Gapless Playback
 
-The next track in the queue is pre-loaded into MPV's internal playlist before the current track finishes, allowing seamless transitions with no gap or click between songs.
+Gapless preloading is implemented through MPV's internal playlist. The next track in the queue is pre-loaded before the current track finishes, allowing seamless transitions with no gap or click between songs.
 
 ### Now Playing Display
 

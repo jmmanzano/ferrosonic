@@ -49,8 +49,8 @@ futures = "0.3"
 # Terminal emulator for cava integration
 vt100 = "0.15"
 
-# Audio output (FFmpeg backend)
-rodio = "0.19"
+# Audio output - direct hardware access with better streaming support
+cpal = "0.13"
 
 [profile.release]
 lto = true

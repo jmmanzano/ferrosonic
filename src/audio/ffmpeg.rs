@@ -1,107 +1,132 @@
-//! FFmpeg audio backend — spawns ffmpeg to decode, uses rodio to play audio
+//! FFmpeg audio backend using CPAL for direct hardware access
+//! CPAL provides better control over hardware buffering to prevent underruns
 
 use std::io::{BufReader, Read};
-use std::process::{Child, Command, Stdio};
+use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use rodio::{OutputStream, OutputStreamHandle, Sink, Source};
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use cpal::{Device, Stream, StreamConfig};
 use tracing::{debug, info, warn};
 
 use crate::error::AudioError;
 
-/// A rodio Source that reads raw s16le PCM from ffmpeg stdout
-struct FfmpegSource {
-    reader: BufReader<std::process::ChildStdout>,
-    sample_rate: u32,
-    channels: u16,
-    buf: Vec<i16>,
-    pos: usize,
+/// Shared state between ffmpeg decoder and audio stream
+struct AudioState {
+    /// Ring buffer for decoded samples
+    buffer: Vec<f32>,
+    /// Write position in the ring buffer
+    write_pos: usize,
+    /// Read position in the ring buffer
+    read_pos: usize,
+    /// Whether stream is actively playing
+    playing: bool,
+    /// Whether data source ended
+    finished: bool,
+    /// Stop signal for decoder thread
+    should_stop: bool,
+    /// Generation id to invalidate old decoder threads on track changes
+    generation: u64,
 }
 
-impl FfmpegSource {
-    fn new(stdout: std::process::ChildStdout, sample_rate: u32, channels: u16) -> Self {
+impl AudioState {
+    fn new(capacity: usize) -> Self {
         Self {
-            reader: BufReader::with_capacity(65536, stdout),
-            sample_rate,
-            channels,
-            buf: Vec::with_capacity(4096),
-            pos: 0,
+            buffer: vec![0.0; capacity],
+            write_pos: 0,
+            read_pos: 0,
+            playing: false,
+            finished: false,
+            should_stop: false,
+            generation: 0,
         }
     }
-}
 
-impl Iterator for FfmpegSource {
-    type Item = i16;
+    fn begin_new_stream(&mut self) -> u64 {
+        self.generation = self.generation.wrapping_add(1);
+        // Clear buffer completely
+        self.buffer.fill(0.0);
+        self.write_pos = 0;
+        self.read_pos = 0;
+        self.playing = true;
+        self.finished = false;
+        self.should_stop = false;
+        self.generation
+    }
 
-    fn next(&mut self) -> Option<i16> {
-        if self.pos >= self.buf.len() {
-            let mut raw = [0u8; 8192];
-            let n = self.reader.read(&mut raw).ok()?;
-            if n == 0 {
-                return None;
-            }
-            self.buf.clear();
-            // Convert pairs of bytes to i16 samples (little-endian)
-            let pairs = n / 2;
-            for i in 0..pairs {
-                let lo = raw[i * 2];
-                let hi = raw[i * 2 + 1];
-                self.buf.push(i16::from_le_bytes([lo, hi]));
-            }
-            self.pos = 0;
+    fn available_write(&self) -> usize {
+        let capacity = self.buffer.len();
+        if self.write_pos >= self.read_pos {
+            capacity - (self.write_pos - self.read_pos) - 1
+        } else {
+            self.read_pos - self.write_pos - 1
         }
-        let sample = self.buf[self.pos];
-        self.pos += 1;
-        Some(sample)
-    }
-}
-
-impl Source for FfmpegSource {
-    fn current_frame_len(&self) -> Option<usize> {
-        None
     }
 
-    fn channels(&self) -> u16 {
-        self.channels
+    fn push_samples(&mut self, samples: &[f32]) -> usize {
+        let mut written = 0;
+        for &sample in samples {
+            if self.available_write() == 0 {
+                break;
+            }
+            self.buffer[self.write_pos] = sample;
+            self.write_pos = (self.write_pos + 1) % self.buffer.len();
+            written += 1;
+        }
+        written
     }
 
-    fn sample_rate(&self) -> u32 {
-        self.sample_rate
+    fn available_read(&self) -> usize {
+        if self.write_pos >= self.read_pos {
+            self.write_pos - self.read_pos
+        } else {
+            self.buffer.len() - self.read_pos + self.write_pos
+        }
     }
 
-    fn total_duration(&self) -> Option<std::time::Duration> {
-        None
+    fn pop_samples(&mut self, out: &mut [f32]) -> usize {
+        let mut read = 0;
+        for sample in out.iter_mut() {
+            if self.available_read() == 0 {
+                break;
+            }
+            *sample = self.buffer[self.read_pos];
+            self.read_pos = (self.read_pos + 1) % self.buffer.len();
+            read += 1;
+        }
+        read
     }
 }
 
 pub struct FfmpegController {
-    process: Option<Child>,
-    sink: Option<Sink>,
-    _stream: Option<OutputStream>,
-    _stream_handle: Option<OutputStreamHandle>,
+    stream: Option<Stream>,
+    audio_state: Arc<Mutex<AudioState>>,
+    decode_thread: Option<std::thread::JoinHandle<()>>,
     paused: Arc<AtomicBool>,
     started: bool,
     start_time: Option<Instant>,
     accumulated_time: f64,
+    device: Option<Device>,
+    config: Option<StreamConfig>,
 }
 
 impl FfmpegController {
     pub fn new() -> Self {
         Self {
-            process: None,
-            sink: None,
-            _stream: None,
-            _stream_handle: None,
+            stream: None,
+            audio_state: Arc::new(Mutex::new(AudioState::new(2097152))),
+            decode_thread: None,
             paused: Arc::new(AtomicBool::new(false)),
             started: false,
             start_time: None,
             accumulated_time: 0.0,
+            device: None,
+            config: None,
         }
     }
 
-    /// Check that ffmpeg is available on the system
     pub fn check_available() -> bool {
         Command::new("ffmpeg")
             .arg("-version")
@@ -113,13 +138,25 @@ impl FfmpegController {
     }
 
     pub fn start(&mut self) -> Result<(), AudioError> {
-        // Initialize rodio output stream
-        let (stream, handle) = OutputStream::try_default()
-            .map_err(|e| AudioError::MpvIpc(format!("Failed to open audio output: {}", e)))?;
-        self._stream = Some(stream);
-        self._stream_handle = Some(handle);
+        let host = cpal::default_host();
+        let device = host
+            .default_output_device()
+            .ok_or_else(|| AudioError::MpvIpc("No audio output device found".to_string()))?;
+
+        let config = StreamConfig {
+            channels: 2,
+            sample_rate: cpal::SampleRate(48000),
+            buffer_size: cpal::BufferSize::Default,
+        };
+
+        info!(
+            "FFmpeg audio backend started (CPAL device: {})",
+            device.name().unwrap_or_else(|_| "Unknown".to_string())
+        );
+
+        self.device = Some(device);
+        self.config = Some(config);
         self.started = true;
-        info!("FFmpeg audio backend started (rodio output ready)");
         Ok(())
     }
 
@@ -128,19 +165,107 @@ impl FfmpegController {
     }
 
     pub fn loadfile(&mut self, url: &str) -> Result<(), AudioError> {
-        // Stop any current playback
-        self.stop_current();
+        // Signal previous decode thread to stop and detach it
+        {
+            let mut state = self.audio_state.lock().unwrap();
+            state.should_stop = true;
+        }
+        let _ = self.decode_thread.take();
 
         info!("FFmpeg loading: {}", url.split('?').next().unwrap_or(url));
 
-        // Spawn ffmpeg to decode the URL to raw PCM
+        let device = self
+            .device
+            .as_ref()
+            .ok_or_else(|| AudioError::MpvIpc("Audio device not initialized".to_string()))?;
+
+        let config = self
+            .config
+            .as_ref()
+            .ok_or_else(|| AudioError::MpvIpc("Audio config not initialized".to_string()))?;
+
+        // Reset buffer and start a fresh stream generation
+        let generation = {
+            let mut state = self.audio_state.lock().unwrap();
+            state.begin_new_stream()
+        };
+
+        let url = url.to_string();
+        let audio_state = Arc::clone(&self.audio_state);
+
+        // Start new decode thread
+        let decode_thread = std::thread::spawn(move || {
+            if let Err(e) = Self::decode_stream(&url, audio_state, generation) {
+                warn!("FFmpeg decode error: {}", e);
+            }
+        });
+        
+        self.decode_thread = Some(decode_thread);
+
+        let audio_state = Arc::clone(&self.audio_state);
+        let paused = Arc::clone(&self.paused);
+
+        let stream = device
+            .build_output_stream(
+                &config,
+                move |output: &mut [f32], _: &cpal::OutputCallbackInfo| {
+                    if paused.load(Ordering::SeqCst) {
+                        for sample in output.iter_mut() {
+                            *sample = 0.0;
+                        }
+                        return;
+                    }
+
+                    let mut state = audio_state.lock().unwrap();
+                    let read = state.pop_samples(output);
+
+                    for i in read..output.len() {
+                        output[i] = 0.0;
+                    }
+
+                    if read < output.len() && !state.finished {
+                        warn!("Audio buffer underrun: got {} of {} samples", read, output.len());
+                    }
+                },
+                move |err| {
+                    warn!("CPAL stream error: {}", err);
+                },
+            )
+            .map_err(|e| AudioError::MpvIpc(format!("Failed to build stream: {}", e)))?;
+
+        stream
+            .play()
+            .map_err(|e| AudioError::MpvIpc(format!("Failed to play stream: {}", e)))?;
+
+        self.stream = Some(stream);
+        self.paused.store(false, Ordering::SeqCst);
+        self.start_time = Some(Instant::now());
+        self.accumulated_time = 0.0;
+
+        debug!("FFmpeg playback started with CPAL");
+        Ok(())
+    }
+
+    fn decode_stream(
+        url: &str,
+        audio_state: Arc<Mutex<AudioState>>,
+        generation: u64,
+    ) -> Result<(), String> {
         let mut child = Command::new("ffmpeg")
             .args([
+                "-reconnect", "1",
+                "-reconnect_streamed", "1",
+                "-reconnect_delay_max", "5",
+                "-probesize", "64M",
+                "-analyzeduration", "20M",
+                "-fflags", "+discardcorrupt",
                 "-i", url,
-                "-f", "s16le",
-                "-acodec", "pcm_s16le",
+                "-f", "s32le",
+                "-acodec", "pcm_s32le",
                 "-ac", "2",
-                "-ar", "44100",
+                "-ar", "48000",
+                "-af", "aresample=async=1:min_hard_comp=0.100000",
+                "-bufsize", "2M",
                 "-loglevel", "error",
                 "pipe:1",
             ])
@@ -148,60 +273,104 @@ impl FfmpegController {
             .stderr(Stdio::null())
             .stdin(Stdio::null())
             .spawn()
-            .map_err(|e| AudioError::MpvIpc(format!("Failed to spawn ffmpeg: {}", e)))?;
+            .map_err(|e| format!("Failed to spawn ffmpeg: {}", e))?;
 
-        let stdout = child.stdout.take()
-            .ok_or_else(|| AudioError::MpvIpc("No stdout from ffmpeg".to_string()))?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| "No stdout from ffmpeg".to_string())?;
 
-        let source = FfmpegSource::new(stdout, 44100, 2);
+        let mut reader = BufReader::with_capacity(262144, stdout);
+        let mut raw = [0u8; 131072];
+        let mut decode_buffer = Vec::with_capacity(32768);
+        const SCALE: f32 = 1.0 / 2147483648.0;
 
-        // Create sink and play
-        let handle = self._stream_handle.as_ref()
-            .ok_or_else(|| AudioError::MpvIpc("Audio output not initialized".to_string()))?;
-        let sink = Sink::try_new(handle)
-            .map_err(|e| AudioError::MpvIpc(format!("Failed to create audio sink: {}", e)))?;
-        sink.append(source);
+        loop {
+            // Check if we should stop
+            {
+                let state = audio_state.lock().unwrap();
+                if state.should_stop || state.generation != generation {
+                    debug!("Decode thread stopping on request");
+                    return Ok(());
+                }
+            }
 
-        self.process = Some(child);
-        self.sink = Some(sink);
-        self.paused.store(false, Ordering::SeqCst);
-        self.start_time = Some(Instant::now());
-        self.accumulated_time = 0.0;
+            let n = reader.read(&mut raw).map_err(|e| e.to_string())?;
+            if n == 0 {
+                break;
+            }
 
-        debug!("FFmpeg playback started");
+            decode_buffer.clear();
+            for chunk in raw[..n].chunks_exact(4) {
+                let i32_sample = i32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+                let f32_sample = (i32_sample as f32) * SCALE;
+                decode_buffer.push(f32_sample);
+            }
+
+            let mut offset = 0usize;
+            while offset < decode_buffer.len() {
+                // Check for stop signal before waiting
+                {
+                    let state = audio_state.lock().unwrap();
+                    if state.should_stop || state.generation != generation {
+                        return Ok(());
+                    }
+                }
+
+                let mut state = audio_state.lock().unwrap();
+                let written = state.push_samples(&decode_buffer[offset..]);
+                drop(state);
+
+                if written == 0 {
+                    std::thread::sleep(std::time::Duration::from_millis(1));
+                } else {
+                    offset += written;
+                }
+            }
+        }
+
+        {
+            let mut state = audio_state.lock().unwrap();
+            if state.generation == generation {
+                state.finished = true;
+            }
+        }
+
+        debug!("FFmpeg decode finished");
         Ok(())
     }
 
     fn stop_current(&mut self) {
-        if let Some(sink) = self.sink.take() {
-            sink.stop();
+        if let Some(stream) = self.stream.take() {
+            let _ = stream.pause();
         }
-        if let Some(mut child) = self.process.take() {
-            let _ = child.kill();
-            let _ = child.wait();
+        
+        // Signal decode thread to stop
+        {
+            let mut state = self.audio_state.lock().unwrap();
+            state.should_stop = true;
+            state.generation = state.generation.wrapping_add(1);
+            state.write_pos = 0;
+            state.read_pos = 0;
+            state.finished = true;
         }
+        let _ = self.decode_thread.take();
+        
         self.start_time = None;
         self.accumulated_time = 0.0;
     }
 
     pub fn pause(&mut self) -> Result<(), AudioError> {
-        if let Some(ref sink) = self.sink {
-            sink.pause();
-            // Accumulate elapsed time
-            if let Some(start) = self.start_time.take() {
-                self.accumulated_time += start.elapsed().as_secs_f64();
-            }
-            self.paused.store(true, Ordering::SeqCst);
+        if let Some(start) = self.start_time.take() {
+            self.accumulated_time += start.elapsed().as_secs_f64();
         }
+        self.paused.store(true, Ordering::SeqCst);
         Ok(())
     }
 
     pub fn resume(&mut self) -> Result<(), AudioError> {
-        if let Some(ref sink) = self.sink {
-            sink.play();
-            self.start_time = Some(Instant::now());
-            self.paused.store(false, Ordering::SeqCst);
-        }
+        self.start_time = Some(Instant::now());
+        self.paused.store(false, Ordering::SeqCst);
         Ok(())
     }
 
@@ -233,18 +402,11 @@ impl FfmpegController {
     }
 
     pub fn is_idle(&self) -> Result<bool, AudioError> {
-        if let Some(ref sink) = self.sink {
-            Ok(sink.empty())
-        } else {
-            Ok(true)
-        }
+        let state = self.audio_state.lock().unwrap();
+        Ok(state.available_read() == 0 && state.finished)
     }
 
-    pub fn set_volume(&mut self, volume: i32) -> Result<(), AudioError> {
-        if let Some(ref sink) = self.sink {
-            let vol = (volume.clamp(0, 100) as f32) / 100.0;
-            sink.set_volume(vol);
-        }
+    pub fn set_volume(&mut self, _volume: i32) -> Result<(), AudioError> {
         Ok(())
     }
 
@@ -255,7 +417,6 @@ impl FfmpegController {
         Ok(())
     }
 
-    // Stubs for features not fully supported by FFmpeg backend
     pub fn seek(&mut self, _position: f64) -> Result<(), AudioError> {
         warn!("Seek not supported in FFmpeg backend");
         Ok(())
@@ -272,11 +433,11 @@ impl FfmpegController {
     }
 
     pub fn get_playlist_count(&self) -> Result<usize, AudioError> {
-        Ok(if self.sink.is_some() { 1 } else { 0 })
+        Ok(if self.stream.is_some() { 1 } else { 0 })
     }
 
     pub fn get_playlist_pos(&self) -> Result<Option<i64>, AudioError> {
-        Ok(if self.sink.is_some() { Some(0) } else { None })
+        Ok(if self.stream.is_some() { Some(0) } else { None })
     }
 
     pub fn playlist_remove(&mut self, _index: usize) -> Result<(), AudioError> {
@@ -288,15 +449,15 @@ impl FfmpegController {
     }
 
     pub fn get_sample_rate(&self) -> Result<Option<u32>, AudioError> {
-        Ok(Some(44100))
+        Ok(Some(48000))
     }
 
     pub fn get_bit_depth(&self) -> Result<Option<u32>, AudioError> {
-        Ok(Some(16))
+        Ok(Some(32))
     }
 
     pub fn get_audio_format(&self) -> Result<Option<String>, AudioError> {
-        Ok(Some("s16le".to_string()))
+        Ok(Some("s32le".to_string()))
     }
 
     pub fn get_channels(&self) -> Result<Option<String>, AudioError> {
