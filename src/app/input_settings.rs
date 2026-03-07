@@ -21,7 +21,7 @@ impl App {
                     }
                 }
                 KeyCode::Down | KeyCode::Char('j') => {
-                    if field < 3 {
+                    if field < 4 {
                         state.settings_state.selected_field = field + 1;
                     }
                 }
@@ -65,6 +65,13 @@ impl App {
                         state.notify(format!("Audio Backend: {} (restart required)", new_backend.label()));
                         config_changed = true;
                     }
+                    4 => {
+                        state.settings_state.non_stop_mode = !state.settings_state.non_stop_mode;
+                        state.config.non_stop_mode = state.settings_state.non_stop_mode;
+                        let status = if state.settings_state.non_stop_mode { "On" } else { "Off" };
+                        state.notify(format!("Non-stop mode: {}", status));
+                        config_changed = true;
+                    }
                     _ => {}
                 },
                 // Right / Enter / Space
@@ -106,6 +113,13 @@ impl App {
                                 AudioBackend::Mpv => "mpv".to_string(),
                             };
                             state.notify(format!("Audio Backend: {} (restart required)", new_backend.label()));
+                            config_changed = true;
+                        }
+                        4 => {
+                            state.settings_state.non_stop_mode = !state.settings_state.non_stop_mode;
+                            state.config.non_stop_mode = state.settings_state.non_stop_mode;
+                            let status = if state.settings_state.non_stop_mode { "On" } else { "Off" };
+                            state.notify(format!("Non-stop mode: {}", status));
                             config_changed = true;
                         }
                         _ => {}

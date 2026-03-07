@@ -34,6 +34,9 @@ pub struct Config {
     /// Cava visualizer height percentage (10-80, step 5)
     #[serde(rename = "CavaSize", default = "Config::default_cava_size")]
     pub cava_size: u8,
+    /// Enable automatic queue extension with similar songs
+    #[serde(rename = "NonStopMode", default)]
+    pub non_stop_mode: bool,
     #[serde(rename = "AudioBackend", default)]
     pub audio_backend: String,
 }

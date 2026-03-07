@@ -278,6 +278,14 @@ impl SubsonicClient {
         Ok((playlist, detail.entry))
     }
 
+    /// Get similar songs for a given song ID
+    pub async fn get_similar_songs(&self, id: &str, count: usize) -> Result<Vec<Child>, SubsonicError> {
+        let data: SimilarSongsData = self
+            .request(&format!("getSimilarSongs2?id={}&count={}", id, count))
+            .await?;
+        Ok(data.similar_songs.song)
+    }
+
     /// Get stream URL for a song
     ///
     /// Returns the full URL with authentication that can be passed to MPV

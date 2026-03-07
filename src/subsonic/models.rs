@@ -239,6 +239,19 @@ pub struct InternetRadioStationsInner {
     pub internet_radio_station: Vec<InternetRadioStation>,
 }
 
+/// Similar songs response
+#[derive(Debug, Deserialize)]
+pub struct SimilarSongsData {
+    #[serde(rename = "similarSongs2")]
+    pub similar_songs: SimilarSongsInner,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SimilarSongsInner {
+    #[serde(default, rename = "song")]
+    pub song: Vec<Child>,
+}
+
 /// Ping response (for testing connection)
 #[derive(Debug, Deserialize)]
 pub struct PingData {}

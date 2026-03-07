@@ -221,7 +221,7 @@ pub struct ServerState {
 /// Settings page state
 #[derive(Debug, Clone)]
 pub struct SettingsState {
-    /// Currently focused field (0=Theme, 1=Cava, 2=CavaSize, 3=AudioBackend)
+    /// Currently focused field (0=Theme, 1=Cava, 2=CavaSize, 3=AudioBackend, 4=NonStopMode)
     pub selected_field: usize,
     /// Available themes (Default + loaded from files)
     pub themes: Vec<ThemeData>,
@@ -233,6 +233,8 @@ pub struct SettingsState {
     pub cava_size: u8,
     /// Audio backend
     pub audio_backend: AudioBackend,
+    /// Auto-extend queue with similar songs when the last song is playing
+    pub non_stop_mode: bool,
 }
 
 impl Default for SettingsState {
@@ -244,6 +246,7 @@ impl Default for SettingsState {
             cava_enabled: false,
             cava_size: 40,
             audio_backend: AudioBackend::default(),
+            non_stop_mode: false,
         }
     }
 }
@@ -387,6 +390,7 @@ impl AppState {
         state.settings_state.cava_enabled = config.cava;
         state.settings_state.cava_size = config.cava_size.clamp(10, 80);
         state.settings_state.audio_backend = audio_backend;
+        state.settings_state.non_stop_mode = config.non_stop_mode;
         state
     }
 

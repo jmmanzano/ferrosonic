@@ -74,6 +74,85 @@ impl App {
 }
 
 impl App {
+    async fn maybe_extend_queue_with_similar(&mut self) {
+        let non_stop_mode = {
+            let state = self.state.read().await;
+            state.settings_state.non_stop_mode
+        };
+        if !non_stop_mode {
+            self.last_auto_similar_seed_id = None;
+            return;
+        }
+
+        let (seed_song, is_last_in_queue) = {
+            let state = self.state.read().await;
+            let Some(current_pos) = state.queue_position else {
+                return;
+            };
+            let Some(song) = state.queue.get(current_pos).cloned() else {
+                return;
+            };
+            (song, current_pos + 1 == state.queue.len())
+        };
+
+        if !is_last_in_queue {
+            self.last_auto_similar_seed_id = None;
+            return;
+        }
+
+        if self.last_auto_similar_seed_id.as_deref() == Some(seed_song.id.as_str()) {
+            return;
+        }
+        self.last_auto_similar_seed_id = Some(seed_song.id.clone());
+
+        let Some(client) = self.subsonic.clone() else {
+            return;
+        };
+
+        let existing_ids = {
+            let state = self.state.read().await;
+            state
+                .queue
+                .iter()
+                .map(|song| song.id.clone())
+                .collect::<std::collections::HashSet<_>>()
+        };
+
+        match client.get_similar_songs(&seed_song.id, 10).await {
+            Ok(mut similar) => {
+                similar.retain(|song| song.id != seed_song.id && !existing_ids.contains(&song.id));
+
+                if similar.is_empty() {
+                    info!("No similar songs available to extend queue");
+                    return;
+                }
+
+                let added = similar.len();
+                {
+                    let mut state = self.state.write().await;
+                    state.queue.extend(similar);
+                    state.notify(format!("Auto-added {} similar songs", added));
+                }
+
+                info!(
+                    "Auto-extended queue with {} similar songs from seed '{}'",
+                    added, seed_song.title
+                );
+
+                let current_pos = {
+                    let state = self.state.read().await;
+                    state.queue_position
+                };
+                if let Some(current_pos) = current_pos {
+                    self.preload_next_track(current_pos).await;
+                }
+            }
+            Err(e) => {
+                warn!("Failed to fetch similar songs: {}", e);
+            }
+        }
+    }
+
     /// Update playback position and audio info from MPV
     pub(super) async fn update_playback_info(&mut self) {
         // Only update if something should be playing
@@ -88,6 +167,8 @@ impl App {
 
         // Check for track advancement
         if is_playing {
+            self.maybe_extend_queue_with_similar().await;
+
             // Early transition: if near end of track and no preloaded next track,
             // advance immediately instead of waiting for idle detection
             {
@@ -411,6 +492,8 @@ impl App {
             state.now_playing.channels = None;
         }
 
+        self.last_auto_similar_seed_id = None;
+
         info!("Playing: {} (queue pos {})", song.title, pos);
         if self.audio_is_paused().unwrap_or(false) {
             let _ = self.audio_resume();
@@ -464,6 +547,7 @@ impl App {
     /// Stop playback and clear the queue
     pub(super) async fn stop_playback(&mut self) -> Result<(), Error> {
         let _ = self.audio_stop();
+        self.last_auto_similar_seed_id = None;
 
         let mut state = self.state.write().await;
         state.now_playing.state = PlaybackState::Stopped;
@@ -484,6 +568,7 @@ impl App {
     pub(super) async fn play_radio_station(&mut self, station: &InternetRadioStation) -> Result<(), Error> {
         // Stop any current playback first
         let _ = self.audio_stop();
+        self.last_auto_similar_seed_id = None;
 
         let stream_url = station.stream_url.clone();
 

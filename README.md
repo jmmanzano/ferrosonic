@@ -13,6 +13,7 @@ Ferrosonic is inspired by [Termsonic](https://git.sixfoisneuf.fr/termsonic/about
 - **Playlist support** - Browse and play server playlists with shuffle capability
 - **Internet radio** - Browse and play internet radio stations configured on your Subsonic server
 - **Play queue management** - Add, remove, reorder, shuffle, and clear queue history
+- **Non-stop mode** - When enabled, auto-extends the queue with 10 similar songs from Subsonic while the last queued track is playing
 - **Audio quality display** - Real-time display of sample rate, bit depth, codec format, and channel layout
 - **Audio backend selection** - Choose between MPV and FFmpeg+CPAL audio backends
 - **Audio visualizer** - Integrated cava audio visualizer with theme-matched gradient colors and adjustable size
@@ -85,6 +86,7 @@ Password = "your-password"
 Theme = "Default"
 Cava = false
 CavaSize = 40
+NonStopMode = false
 AudioBackend = "mpv"
 ```
 
@@ -97,6 +99,7 @@ AudioBackend = "mpv"
 | `Cava` | Enable cava audio visualizer (`true` / `false`) |
 | `CavaSize` | Cava visualizer height percentage (10–80, step 5, default 40) |
 | `AudioBackend` | Audio playback backend (`mpv` or `ffmpeg`) |
+| `NonStopMode` | Enable/disable Non-stop mode (`true` / `false`, default `false`) |
 
 Logs are written to `~/.config/ferrosonic/ferrosonic.log`.
 
@@ -185,7 +188,7 @@ Logs are written to `~/.config/ferrosonic/ferrosonic.log`.
 | `Left` / `h` | Previous option |
 | `Right` / `l` / `Enter` / `Space` | Next option |
 
-Settings include theme selection, cava visualizer toggle, cava size adjustment, and audio backend selection (MPV / FFmpeg). Changes are saved automatically.
+Settings include theme selection, cava visualizer toggle, cava size adjustment, audio backend selection (MPV / FFmpeg), and Non-stop mode toggle. Changes are saved automatically.
 
 ## Mouse Support
 

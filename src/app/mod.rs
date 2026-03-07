@@ -70,6 +70,8 @@ pub struct App {
     use_ffmpeg_backend: bool,
     /// Channel to receive audio actions (from MPRIS)
     audio_rx: mpsc::Receiver<AudioAction>,
+    /// Last song ID used for automatic similar-song extension
+    last_auto_similar_seed_id: Option<String>,
     /// MPRIS D-Bus server (Unix / D-Bus only)
     #[cfg(unix)]
     mpris_server: Option<mpris_server::Server<MprisPlayer>>,
@@ -107,6 +109,7 @@ impl App {
             last_click: None,
             use_ffmpeg_backend: false,
             audio_rx,
+            last_auto_similar_seed_id: None,
             #[cfg(unix)]
             mpris_server: None,
         }
