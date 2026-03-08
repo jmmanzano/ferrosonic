@@ -169,6 +169,10 @@ impl FfmpegController {
     }
 
     pub fn loadfile(&mut self, url: &str) -> Result<(), AudioError> {
+        self.loadfile_at_position(url, 0.0)
+    }
+
+    fn loadfile_at_position(&mut self, url: &str, start_position: f64) -> Result<(), AudioError> {
         // Signal previous decode thread to stop and detach it
         {
             let mut state = self.audio_state.lock().unwrap();
@@ -198,10 +202,13 @@ impl FfmpegController {
         let url = url.to_string();
         let audio_state = Arc::clone(&self.audio_state);
         let equalizer_filter = self.equalizer_filter.clone();
+        let start_position = start_position.max(0.0);
 
         // Start new decode thread
         let decode_thread = std::thread::spawn(move || {
-            if let Err(e) = Self::decode_stream(&url, audio_state, generation, equalizer_filter) {
+            if let Err(e) =
+                Self::decode_stream(&url, audio_state, generation, equalizer_filter, start_position)
+            {
                 warn!("FFmpeg decode error: {}", e);
             }
         });
@@ -246,7 +253,7 @@ impl FfmpegController {
         self.stream = Some(stream);
         self.paused.store(false, Ordering::SeqCst);
         self.start_time = Some(Instant::now());
-        self.accumulated_time = 0.0;
+        self.accumulated_time = start_position;
 
         debug!("FFmpeg playback started with CPAL");
         Ok(())
@@ -257,6 +264,7 @@ impl FfmpegController {
         audio_state: Arc<Mutex<AudioState>>,
         generation: u64,
         equalizer_filter: Option<String>,
+        start_position: f64,
     ) -> Result<(), String> {
         let mut args = vec![
             "-reconnect".to_string(), "1".to_string(),
@@ -265,20 +273,25 @@ impl FfmpegController {
             "-probesize".to_string(), "64M".to_string(),
             "-analyzeduration".to_string(), "20M".to_string(),
             "-fflags".to_string(), "+discardcorrupt".to_string(),
-            "-i".to_string(), url.to_string(),
-            "-f".to_string(), "s32le".to_string(),
-            "-acodec".to_string(), "pcm_s32le".to_string(),
-            "-ac".to_string(), "2".to_string(),
-            "-ar".to_string(), "48000".to_string(),
-            "-af".to_string(),
         ];
+
+        if start_position > 0.0 {
+            args.extend(["-ss".to_string(), format!("{:.3}", start_position)]);
+        }
+        args.extend(["-i".to_string(), url.to_string()]);
 
         let mut filters = Vec::new();
         if let Some(eq) = equalizer_filter {
             filters.push(eq);
         }
         filters.push("aresample=async=1:min_hard_comp=0.100000".to_string());
-        args.push(filters.join(","));
+        args.extend([
+            "-f".to_string(), "s32le".to_string(),
+            "-acodec".to_string(), "pcm_s32le".to_string(),
+            "-ac".to_string(), "2".to_string(),
+            "-ar".to_string(), "48000".to_string(),
+            "-af".to_string(), filters.join(","),
+        ]);
 
         args.extend([
             "-bufsize".to_string(), "2M".to_string(),
@@ -439,12 +452,34 @@ impl FfmpegController {
 
     /// Set the equalizer filter chain. Pass None to disable.
     pub fn set_equalizer_filter(&mut self, filter: Option<String>) -> Result<(), AudioError> {
+        self.set_equalizer_filter_with_mode(filter, true)
+    }
+
+    /// Set the equalizer filter chain and force a stream restart from the start.
+    /// Useful for live radio streams where seek-based resume is not meaningful.
+    pub fn set_equalizer_filter_restart_stream(
+        &mut self,
+        filter: Option<String>,
+    ) -> Result<(), AudioError> {
+        self.set_equalizer_filter_with_mode(filter, false)
+    }
+
+    fn set_equalizer_filter_with_mode(
+        &mut self,
+        filter: Option<String>,
+        preserve_position: bool,
+    ) -> Result<(), AudioError> {
         self.equalizer_filter = filter;
 
-        // FFmpeg filters are baked at process start, so we need to restart
-        // the decode stream if something is currently playing.
+        // Rebuild FFmpeg filter graph at current position so EQ changes are audible now
+        // without jumping back to the beginning of the track.
         if let Some(url) = self.current_url.clone() {
-            self.loadfile(&url)?;
+            let position = if preserve_position {
+                self.get_time_pos().unwrap_or(0.0)
+            } else {
+                0.0
+            };
+            self.loadfile_at_position(&url, position)?;
         }
 
         Ok(())

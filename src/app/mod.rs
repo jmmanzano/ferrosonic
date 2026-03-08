@@ -74,6 +74,8 @@ pub struct App {
     audio_rx: mpsc::Receiver<AudioAction>,
     /// Last song ID used for automatic similar-song extension
     last_auto_similar_seed_id: Option<String>,
+    /// Debounced equalizer apply deadline
+    pending_equalizer_apply_at: Option<std::time::Instant>,
     /// MPRIS D-Bus server (Unix / D-Bus only)
     #[cfg(unix)]
     mpris_server: Option<mpris_server::Server<MprisPlayer>>,
@@ -112,6 +114,7 @@ impl App {
             use_ffmpeg_backend: false,
             audio_rx,
             last_auto_similar_seed_id: None,
+            pending_equalizer_apply_at: None,
             #[cfg(unix)]
             mpris_server: None,
         }
@@ -396,6 +399,9 @@ impl App {
 
             // Read cava output (non-blocking)
             self.read_cava_output().await;
+
+            // Apply pending equalizer change after debounce window.
+            self.maybe_apply_scheduled_equalizer().await;
 
             // Update playback position every ~500ms
             let now = std::time::Instant::now();

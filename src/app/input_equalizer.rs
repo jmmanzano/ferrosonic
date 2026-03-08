@@ -70,7 +70,7 @@ impl App {
         }
 
         if should_apply {
-            self.apply_equalizer_from_state().await;
+            self.schedule_equalizer_apply_debounced();
         }
 
         Ok(())

@@ -8,6 +8,7 @@ impl App {
     /// Handle settings page keys
     pub(super) async fn handle_settings_key(&mut self, key: event::KeyEvent) -> Result<(), Error> {
         let mut config_changed = false;
+        let mut equalizer_changed = false;
 
         {
             let mut state = self.state.write().await;
@@ -79,6 +80,7 @@ impl App {
                         let preset_name = state.settings_state.equalizer_preset_name().to_string();
                         state.notify(format!("Equalizer: {} ({})", status, preset_name));
                         config_changed = true;
+                        equalizer_changed = true;
                     }
                     _ => {}
                 },
@@ -137,6 +139,7 @@ impl App {
                             let preset_name = state.settings_state.equalizer_preset_name().to_string();
                             state.notify(format!("Equalizer: {} ({})", status, preset_name));
                             config_changed = true;
+                            equalizer_changed = true;
                         }
                         _ => {}
                     }
@@ -170,7 +173,9 @@ impl App {
                     state.cava_screen.clear();
                 }
 
-                self.apply_equalizer_from_state().await;
+                if equalizer_changed {
+                    self.schedule_equalizer_apply_debounced();
+                }
             }
         }
 
