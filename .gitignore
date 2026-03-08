@@ -21,3 +21,7 @@ Thumbs.db
 
 # Config (may contain credentials)
 config.toml
+
+rust-toolchain.toml
+packaging/*
+icons/*

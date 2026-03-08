@@ -22,7 +22,7 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    if inner.height < 11 {
+    if inner.height < 13 {
         return;
     }
 
@@ -40,6 +40,8 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
         Constraint::Length(2), // Audio backend
         Constraint::Length(1), // Spacing
         Constraint::Length(2), // Non-stop mode
+        Constraint::Length(1), // Spacing
+        Constraint::Length(2), // Equalizer
         Constraint::Min(1),    // Remaining space
     ])
     .split(inner);
@@ -109,6 +111,21 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
         &colors,
     );
 
+    // Equalizer (field 5)
+    let eq_value = if settings.equalizer_enabled {
+        format!("On ({})", settings.equalizer_preset_name())
+    } else {
+        format!("Off ({})", settings.equalizer_preset_name())
+    };
+    render_option(
+        frame,
+        chunks[11],
+        "Equalizer",
+        &eq_value,
+        settings.selected_field == 5,
+        &colors,
+    );
+
     // Help text at bottom
     let help_text = match settings.selected_field {
         0 => "← → or Enter to change theme (auto-saves)",
@@ -118,6 +135,7 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState) {
         2 => "cava is not installed on this system",
         3 => "← → or Enter to switch audio backend: MPV or FFmpeg (auto-saves, restart required)",
         4 => "← → or Enter to toggle Non-stop mode (auto-saves)",
+        5 => "← → or Enter to toggle equalizer (auto-saves), F7 to choose preset",
         _ => "",
     };
     let help = Paragraph::new(help_text).style(Style::default().fg(colors.muted));

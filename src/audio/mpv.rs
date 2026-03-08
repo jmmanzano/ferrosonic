@@ -147,6 +147,8 @@ pub struct MpvController {
     request_id: AtomicU64,
     /// Socket connection
     socket: Option<IpcStream>,
+    /// Active lavfi equalizer filter, if any
+    equalizer_filter: Option<String>,
 }
 
 impl MpvController {
@@ -157,6 +159,7 @@ impl MpvController {
             process: None,
             request_id: AtomicU64::new(1),
             socket: None,
+            equalizer_filter: None,
         }
     }
 
@@ -278,6 +281,7 @@ impl MpvController {
     pub fn loadfile(&mut self, path: &str) -> Result<(), AudioError> {
         info!("Loading: {}", path.split('?').next().unwrap_or(path));
         self.send_command(vec![json!("loadfile"), json!(path), json!("replace")])?;
+        self.apply_equalizer_filter()?;
         Ok(())
     }
 
@@ -457,6 +461,26 @@ impl MpvController {
         let _ = std::fs::remove_file(&self.socket_path);
 
         info!("MPV shut down");
+        Ok(())
+    }
+
+    /// Set the equalizer lavfi filter. Pass None to disable.
+    pub fn set_equalizer_filter(&mut self, filter: Option<String>) -> Result<(), AudioError> {
+        self.equalizer_filter = filter;
+        if self.socket.is_some() {
+            self.apply_equalizer_filter()?;
+        }
+        Ok(())
+    }
+
+    fn apply_equalizer_filter(&mut self) -> Result<(), AudioError> {
+        // Always clear the previous filter stack first.
+        self.send_command(vec![json!("af"), json!("clr")])?;
+
+        if let Some(filter) = self.equalizer_filter.clone() {
+            self.send_command(vec![json!("af"), json!("add"), json!(filter)])?;
+        }
+
         Ok(())
     }
 

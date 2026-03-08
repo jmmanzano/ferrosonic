@@ -17,6 +17,11 @@ pub fn themes_dir() -> Option<PathBuf> {
     config_dir().map(|p| p.join("themes"))
 }
 
+/// Get the equalizer presets directory path
+pub fn equalizer_presets_dir() -> Option<PathBuf> {
+    config_dir().map(|p| p.join("equalizer"))
+}
+
 /// Get the log file path
 #[allow(dead_code)]
 pub fn log_file() -> Option<PathBuf> {

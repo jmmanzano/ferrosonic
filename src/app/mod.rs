@@ -2,8 +2,10 @@
 
 pub mod actions;
 mod cava;
+mod equalizer;
 mod input;
 mod input_artists;
+mod input_equalizer;
 mod input_playlists;
 mod input_queue;
 mod input_radio;
@@ -134,6 +136,8 @@ impl App {
                     // Fallback to MPV
                     if let Err(e) = self.mpv.start() {
                         warn!("Failed to start MPV: {}", e);
+                    } else {
+                        self.use_ffmpeg_backend = false;
                     }
                 } else {
                     info!("FFmpeg audio backend started successfully");
@@ -146,6 +150,8 @@ impl App {
                 drop(state);
                 if let Err(e) = self.mpv.start() {
                     warn!("Failed to start MPV: {}", e);
+                } else {
+                    self.use_ffmpeg_backend = false;
                 }
             }
         } else {
@@ -184,6 +190,17 @@ impl App {
             state.settings_state.set_theme_by_name(&theme_name);
         }
 
+        // Seed and load equalizer presets from JSON files
+        {
+            use crate::config::equalizer::{load_presets, seed_default_presets};
+            seed_default_presets();
+            let presets = load_presets();
+            let mut state = self.state.write().await;
+            let selected = state.config.equalizer_preset.clone();
+            state.settings_state.equalizer_presets = presets;
+            state.settings_state.set_equalizer_preset_by_name(&selected);
+        }
+
         // Check if cava is available (Unix only — cava is not available on Windows)
         #[cfg(unix)]
         let cava_available = std::process::Command::new("which")
@@ -216,6 +233,9 @@ impl App {
                 self.start_cava(&g, &h, cs);
             }
         }
+
+        // Apply equalizer selection to the selected audio backend.
+        self.apply_equalizer_from_state().await;
 
         // Setup terminal
         enable_raw_mode().map_err(UiError::TerminalInit)?;

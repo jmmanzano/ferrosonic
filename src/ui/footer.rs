@@ -92,6 +92,12 @@ impl<'a> Footer<'a> {
             Page::Settings => {
                 binds.extend([("←/→/Enter", "Change theme")]);
             }
+            Page::Equalizer => {
+                binds.extend([
+                    ("↑/↓", "Select preset"),
+                    ("←/→/Enter", "Enable/Change"),
+                ]);
+            }
         }
 
         binds

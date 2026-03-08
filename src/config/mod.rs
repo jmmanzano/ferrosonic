@@ -1,6 +1,7 @@
 //! Configuration loading and management
 
 pub mod paths;
+pub mod equalizer;
 
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -39,11 +40,19 @@ pub struct Config {
     pub non_stop_mode: bool,
     #[serde(rename = "AudioBackend", default)]
     pub audio_backend: String,
+    #[serde(rename = "EqualizerEnabled", default)]
+    pub equalizer_enabled: bool,
+    #[serde(rename = "EqualizerPreset", default = "Config::default_equalizer_preset")]
+    pub equalizer_preset: String,
 }
 
 impl Config {
     fn default_cava_size() -> u8 {
         40
+    }
+
+    fn default_equalizer_preset() -> String {
+        "Flat".to_string()
     }
 
     /// Create a new empty config

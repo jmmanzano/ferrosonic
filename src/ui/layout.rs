@@ -99,6 +99,9 @@ pub fn draw(frame: &mut Frame, state: &mut AppState) {
         Page::Settings => {
             pages::settings::render(frame, content_area, state);
         }
+        Page::Equalizer => {
+            pages::equalizer::render(frame, content_area, state);
+        }
     }
 
     // Render now playing

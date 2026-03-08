@@ -90,6 +90,10 @@ impl App {
                 state.page = Page::Settings;
                 return Ok(());
             }
+            (KeyCode::F(7), _) => {
+                state.page = Page::Equalizer;
+                return Ok(());
+            }
             // Playback controls (global)
             (KeyCode::Char('p'), KeyModifiers::NONE) | (KeyCode::Char(' '), KeyModifiers::NONE) => {
                 // Toggle pause
@@ -146,6 +150,7 @@ impl App {
             Page::Radio => self.handle_radio_key(key).await,
             Page::Server => self.handle_server_key(key).await,
             Page::Settings => self.handle_settings_key(key).await,
+            Page::Equalizer => self.handle_equalizer_key(key).await,
         }
     }
 }

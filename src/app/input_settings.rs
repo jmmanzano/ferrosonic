@@ -21,7 +21,7 @@ impl App {
                     }
                 }
                 KeyCode::Down | KeyCode::Char('j') => {
-                    if field < 4 {
+                    if field < 5 {
                         state.settings_state.selected_field = field + 1;
                     }
                 }
@@ -70,6 +70,14 @@ impl App {
                         state.config.non_stop_mode = state.settings_state.non_stop_mode;
                         let status = if state.settings_state.non_stop_mode { "On" } else { "Off" };
                         state.notify(format!("Non-stop mode: {}", status));
+                        config_changed = true;
+                    }
+                    5 => {
+                        state.settings_state.equalizer_enabled = !state.settings_state.equalizer_enabled;
+                        state.config.equalizer_enabled = state.settings_state.equalizer_enabled;
+                        let status = if state.settings_state.equalizer_enabled { "On" } else { "Off" };
+                        let preset_name = state.settings_state.equalizer_preset_name().to_string();
+                        state.notify(format!("Equalizer: {} ({})", status, preset_name));
                         config_changed = true;
                     }
                     _ => {}
@@ -122,6 +130,14 @@ impl App {
                             state.notify(format!("Non-stop mode: {}", status));
                             config_changed = true;
                         }
+                        5 => {
+                            state.settings_state.equalizer_enabled = !state.settings_state.equalizer_enabled;
+                            state.config.equalizer_enabled = state.settings_state.equalizer_enabled;
+                            let status = if state.settings_state.equalizer_enabled { "On" } else { "Off" };
+                            let preset_name = state.settings_state.equalizer_preset_name().to_string();
+                            state.notify(format!("Equalizer: {} ({})", status, preset_name));
+                            config_changed = true;
+                        }
                         _ => {}
                     }
                 }
@@ -153,6 +169,8 @@ impl App {
                     let mut state = self.state.write().await;
                     state.cava_screen.clear();
                 }
+
+                self.apply_equalizer_from_state().await;
             }
         }
 

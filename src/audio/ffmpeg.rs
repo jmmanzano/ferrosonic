@@ -110,6 +110,8 @@ pub struct FfmpegController {
     accumulated_time: f64,
     device: Option<Device>,
     config: Option<StreamConfig>,
+    equalizer_filter: Option<String>,
+    current_url: Option<String>,
 }
 
 impl FfmpegController {
@@ -124,6 +126,8 @@ impl FfmpegController {
             accumulated_time: 0.0,
             device: None,
             config: None,
+            equalizer_filter: None,
+            current_url: None,
         }
     }
 
@@ -173,6 +177,7 @@ impl FfmpegController {
         let _ = self.decode_thread.take();
 
         info!("FFmpeg loading: {}", url.split('?').next().unwrap_or(url));
+        self.current_url = Some(url.to_string());
 
         let device = self
             .device
@@ -192,10 +197,11 @@ impl FfmpegController {
 
         let url = url.to_string();
         let audio_state = Arc::clone(&self.audio_state);
+        let equalizer_filter = self.equalizer_filter.clone();
 
         // Start new decode thread
         let decode_thread = std::thread::spawn(move || {
-            if let Err(e) = Self::decode_stream(&url, audio_state, generation) {
+            if let Err(e) = Self::decode_stream(&url, audio_state, generation, equalizer_filter) {
                 warn!("FFmpeg decode error: {}", e);
             }
         });
@@ -250,25 +256,38 @@ impl FfmpegController {
         url: &str,
         audio_state: Arc<Mutex<AudioState>>,
         generation: u64,
+        equalizer_filter: Option<String>,
     ) -> Result<(), String> {
+        let mut args = vec![
+            "-reconnect".to_string(), "1".to_string(),
+            "-reconnect_streamed".to_string(), "1".to_string(),
+            "-reconnect_delay_max".to_string(), "5".to_string(),
+            "-probesize".to_string(), "64M".to_string(),
+            "-analyzeduration".to_string(), "20M".to_string(),
+            "-fflags".to_string(), "+discardcorrupt".to_string(),
+            "-i".to_string(), url.to_string(),
+            "-f".to_string(), "s32le".to_string(),
+            "-acodec".to_string(), "pcm_s32le".to_string(),
+            "-ac".to_string(), "2".to_string(),
+            "-ar".to_string(), "48000".to_string(),
+            "-af".to_string(),
+        ];
+
+        let mut filters = Vec::new();
+        if let Some(eq) = equalizer_filter {
+            filters.push(eq);
+        }
+        filters.push("aresample=async=1:min_hard_comp=0.100000".to_string());
+        args.push(filters.join(","));
+
+        args.extend([
+            "-bufsize".to_string(), "2M".to_string(),
+            "-loglevel".to_string(), "error".to_string(),
+            "pipe:1".to_string(),
+        ]);
+
         let mut child = Command::new("ffmpeg")
-            .args([
-                "-reconnect", "1",
-                "-reconnect_streamed", "1",
-                "-reconnect_delay_max", "5",
-                "-probesize", "64M",
-                "-analyzeduration", "20M",
-                "-fflags", "+discardcorrupt",
-                "-i", url,
-                "-f", "s32le",
-                "-acodec", "pcm_s32le",
-                "-ac", "2",
-                "-ar", "48000",
-                "-af", "aresample=async=1:min_hard_comp=0.100000",
-                "-bufsize", "2M",
-                "-loglevel", "error",
-                "pipe:1",
-            ])
+            .args(&args)
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .stdin(Stdio::null())
@@ -412,8 +431,22 @@ impl FfmpegController {
 
     pub fn quit(&mut self) -> Result<(), AudioError> {
         self.stop_current();
+        self.current_url = None;
         self.started = false;
         info!("FFmpeg backend shut down");
+        Ok(())
+    }
+
+    /// Set the equalizer filter chain. Pass None to disable.
+    pub fn set_equalizer_filter(&mut self, filter: Option<String>) -> Result<(), AudioError> {
+        self.equalizer_filter = filter;
+
+        // FFmpeg filters are baked at process start, so we need to restart
+        // the decode stream if something is currently playing.
+        if let Some(url) = self.current_url.clone() {
+            self.loadfile(&url)?;
+        }
+
         Ok(())
     }
 

@@ -7,6 +7,7 @@ use tokio::sync::RwLock;
 use ratatui::layout::Rect;
 
 use crate::config::Config;
+use crate::config::equalizer::EqualizerPreset;
 use crate::subsonic::models::{Album, Artist, Child, InternetRadioStation, Playlist};
 use crate::ui::theme::{ThemeColors, ThemeData};
 
@@ -20,6 +21,7 @@ pub enum Page {
     Radio,
     Server,
     Settings,
+    Equalizer,
 }
 
 impl Page {
@@ -31,6 +33,7 @@ impl Page {
             Page::Radio => 3,
             Page::Server => 4,
             Page::Settings => 5,
+            Page::Equalizer => 6,
         }
     }
 
@@ -42,6 +45,7 @@ impl Page {
             Page::Radio => "Radio",
             Page::Server => "Server",
             Page::Settings => "Settings",
+            Page::Equalizer => "Equalizer",
         }
     }
 
@@ -53,6 +57,7 @@ impl Page {
             Page::Radio => "F4",
             Page::Server => "F5",
             Page::Settings => "F6",
+            Page::Equalizer => "F7",
         }
     }
 }
@@ -221,7 +226,7 @@ pub struct ServerState {
 /// Settings page state
 #[derive(Debug, Clone)]
 pub struct SettingsState {
-    /// Currently focused field (0=Theme, 1=Cava, 2=CavaSize, 3=AudioBackend, 4=NonStopMode)
+    /// Currently focused field (0=Theme, 1=Cava, 2=CavaSize, 3=AudioBackend, 4=NonStopMode, 5=Equalizer)
     pub selected_field: usize,
     /// Available themes (Default + loaded from files)
     pub themes: Vec<ThemeData>,
@@ -235,6 +240,12 @@ pub struct SettingsState {
     pub audio_backend: AudioBackend,
     /// Auto-extend queue with similar songs when the last song is playing
     pub non_stop_mode: bool,
+    /// Equalizer enabled state
+    pub equalizer_enabled: bool,
+    /// Equalizer presets loaded from JSON files
+    pub equalizer_presets: Vec<EqualizerPreset>,
+    /// Selected equalizer preset index
+    pub equalizer_preset_index: usize,
 }
 
 impl Default for SettingsState {
@@ -247,6 +258,12 @@ impl Default for SettingsState {
             cava_size: 40,
             audio_backend: AudioBackend::default(),
             non_stop_mode: false,
+            equalizer_enabled: false,
+            equalizer_presets: vec![EqualizerPreset {
+                name: "Flat".to_string(),
+                bands: [0.0; 10],
+            }],
+            equalizer_preset_index: 0,
         }
     }
 }
@@ -284,6 +301,39 @@ impl SettingsState {
             true
         } else {
             self.theme_index = 0; // Fall back to Default
+            false
+        }
+    }
+
+    pub fn equalizer_preset_name(&self) -> &str {
+        &self.equalizer_presets[self.equalizer_preset_index].name
+    }
+
+    pub fn current_equalizer_preset(&self) -> &EqualizerPreset {
+        &self.equalizer_presets[self.equalizer_preset_index]
+    }
+
+    pub fn next_equalizer_preset(&mut self) {
+        self.equalizer_preset_index =
+            (self.equalizer_preset_index + 1) % self.equalizer_presets.len();
+    }
+
+    pub fn prev_equalizer_preset(&mut self) {
+        self.equalizer_preset_index =
+            (self.equalizer_preset_index + self.equalizer_presets.len() - 1)
+                % self.equalizer_presets.len();
+    }
+
+    pub fn set_equalizer_preset_by_name(&mut self, name: &str) -> bool {
+        if let Some(idx) = self
+            .equalizer_presets
+            .iter()
+            .position(|p| p.name.eq_ignore_ascii_case(name))
+        {
+            self.equalizer_preset_index = idx;
+            true
+        } else {
+            self.equalizer_preset_index = 0;
             false
         }
     }
@@ -391,6 +441,7 @@ impl AppState {
         state.settings_state.cava_size = config.cava_size.clamp(10, 80);
         state.settings_state.audio_backend = audio_backend;
         state.settings_state.non_stop_mode = config.non_stop_mode;
+        state.settings_state.equalizer_enabled = config.equalizer_enabled;
         state
     }
 

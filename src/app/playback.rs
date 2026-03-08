@@ -71,6 +71,13 @@ impl App {
     fn audio_playlist_remove(&mut self, idx: usize) -> Result<(), AudioError> {
         if self.use_ffmpeg_backend { self.ffmpeg.playlist_remove(idx) } else { self.mpv.playlist_remove(idx) }
     }
+    pub(super) fn audio_set_equalizer_filter(&mut self, filter: Option<String>) -> Result<(), AudioError> {
+        if self.use_ffmpeg_backend {
+            self.ffmpeg.set_equalizer_filter(filter)
+        } else {
+            self.mpv.set_equalizer_filter(filter)
+        }
+    }
 }
 
 impl App {

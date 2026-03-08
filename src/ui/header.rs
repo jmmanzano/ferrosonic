@@ -43,7 +43,8 @@ impl Widget for Header {
             Page::Playlists,
             Page::Radio,
             Page::Server,
-            Page::Settings]
+            Page::Settings,
+            Page::Equalizer]
         .iter()
         .map(|p: &Page| Line::from(format!("{} {}", p.shortcut(), p.label())))
         .collect();
@@ -120,6 +121,7 @@ impl Header {
                 Page::Radio,
                 Page::Server,
                 Page::Settings,
+                Page::Equalizer,
             ];
             let divider_width: u16 = 3; // " │ "
             let padding: u16 = 1; // 1 space each side
