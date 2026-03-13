@@ -10,6 +10,19 @@ use ratatui::{
 
 use crate::app::state::AppState;
 
+fn song_rating_stars(song: &crate::subsonic::models::Child) -> String {
+    let rating = song
+        .user_rating
+        .map(|r| r.min(5))
+        .or_else(|| {
+            song.average_rating
+                .map(|r| r.round().clamp(0.0, 5.0) as u8)
+        })
+        .unwrap_or(0);
+
+    format!("{}{}", "★".repeat(rating as usize), "☆".repeat((5 - rating) as usize))
+}
+
 
 /// Render the queue page
 pub fn render(frame: &mut Frame, area: Rect, state: &mut AppState) {
@@ -41,6 +54,7 @@ pub fn render(frame: &mut Frame, area: Rect, state: &mut AppState) {
 
             let artist = song.artist.clone().unwrap_or_default();
             let duration = song.format_duration();
+            let rating = song_rating_stars(song);
             // Show disc.track for songs with disc info
             let track_info = match (song.disc_number, song.track) {
                 (Some(d), Some(t)) if d > 1 => format!(" [{}.{}]", d, t),
@@ -90,6 +104,7 @@ pub fn render(frame: &mut Frame, area: Rect, state: &mut AppState) {
                 Span::styled(indicator, Style::default().fg(colors.playing)),
                 Span::styled(song.title.clone(), title_style),
                 Span::styled(track_info, Style::default().fg(colors.muted)),
+                Span::styled(format!(" {}", rating), Style::default().fg(colors.muted)),
                 if !artist.is_empty() {
                     Span::styled(format!(" - {}", artist), artist_style)
                 } else {

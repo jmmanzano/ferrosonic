@@ -28,6 +28,16 @@ pub fn log_file() -> Option<PathBuf> {
     config_dir().map(|p| p.join("ferrosonic.log"))
 }
 
+/// Get persisted queue snapshot file path
+pub fn queue_file() -> Option<PathBuf> {
+    config_dir().map(|p| p.join("queue.json"))
+}
+
+/// Get persisted UI state snapshot file path
+pub fn ui_state_file() -> Option<PathBuf> {
+    config_dir().map(|p| p.join("ui_state.json"))
+}
+
 /// Get the MPV socket path
 /// On Unix: a regular Unix domain socket in the temp directory.
 /// On Windows: a named pipe path (\\.\.\pipe\ferrosonic-mpv).

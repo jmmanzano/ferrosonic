@@ -30,6 +30,7 @@ use crossterm::event::{
     KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
+use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 
@@ -80,9 +81,39 @@ pub struct App {
     last_auto_similar_seed_id: Option<String>,
     /// Debounced equalizer apply deadline
     pending_equalizer_apply_at: Option<std::time::Instant>,
+    /// Last persisted queue JSON payload (used to avoid unnecessary writes)
+    last_saved_queue_json: Option<String>,
+    /// Last persisted UI state JSON payload (used to avoid unnecessary writes)
+    last_saved_ui_state_json: Option<String>,
     /// MPRIS D-Bus server (Unix / D-Bus only)
     #[cfg(unix)]
     mpris_server: Option<mpris_server::Server<MprisPlayer>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct QueueSnapshot {
+    queue: Vec<crate::subsonic::models::Child>,
+    queue_position: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct UiStateSnapshot {
+    page_index: usize,
+    artists_selected_index: Option<usize>,
+    artists_selected_song: Option<usize>,
+    artists_focus: usize,
+    artists_tree_scroll_offset: usize,
+    artists_song_scroll_offset: usize,
+    artists_expanded: Vec<String>,
+    queue_selected: Option<usize>,
+    queue_scroll_offset: usize,
+    playlists_selected_playlist: Option<usize>,
+    playlists_selected_song: Option<usize>,
+    playlists_focus: usize,
+    playlists_playlist_scroll_offset: usize,
+    playlists_song_scroll_offset: usize,
+    radio_selected: Option<usize>,
+    radio_scroll_offset: usize,
 }
 
 impl App {
@@ -119,6 +150,8 @@ impl App {
             audio_rx,
             last_auto_similar_seed_id: None,
             pending_equalizer_apply_at: None,
+            last_saved_queue_json: None,
+            last_saved_ui_state_json: None,
             #[cfg(unix)]
             mpris_server: None,
         }
@@ -271,8 +304,16 @@ impl App {
             self.load_initial_data().await;
         }
 
+        // Restore persisted queue from previous session
+        self.load_persisted_queue().await;
+        self.load_persisted_ui_state().await;
+
         // Main event loop
         let result = self.event_loop(&mut terminal).await;
+
+        // Persist queue snapshot one last time before shutdown
+        self.maybe_persist_queue().await;
+        self.maybe_persist_ui_state().await;
 
         // Cleanup cava
         self.stop_cava();
@@ -354,12 +395,276 @@ impl App {
         }
     }
 
+    async fn load_persisted_queue(&mut self) {
+        let Some(path) = crate::config::paths::queue_file() else {
+            return;
+        };
+
+        if !path.exists() {
+            return;
+        }
+
+        let contents = match std::fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(e) => {
+                warn!("Failed to read queue snapshot '{}': {}", path.display(), e);
+                return;
+            }
+        };
+
+        let snapshot: QueueSnapshot = match serde_json::from_str(&contents) {
+            Ok(s) => s,
+            Err(e) => {
+                warn!("Failed to parse queue snapshot '{}': {}", path.display(), e);
+                return;
+            }
+        };
+
+        let mut state = self.state.write().await;
+        state.queue = snapshot.queue;
+        state.queue_position = snapshot
+            .queue_position
+            .filter(|&pos| pos < state.queue.len());
+        state.queue_state.selected = if state.queue.is_empty() {
+            None
+        } else {
+            state.queue_position.or(Some(0))
+        };
+
+        info!("Restored persisted queue with {} songs", state.queue.len());
+
+        if let Ok(json) = serde_json::to_string(&QueueSnapshot {
+            queue: state.queue.clone(),
+            queue_position: state.queue_position,
+        }) {
+            self.last_saved_queue_json = Some(json);
+        }
+    }
+
+    async fn maybe_persist_queue(&mut self) {
+        let snapshot = {
+            let state = self.state.read().await;
+            QueueSnapshot {
+                queue: state.queue.clone(),
+                queue_position: state.queue_position,
+            }
+        };
+
+        let json = match serde_json::to_string(&snapshot) {
+            Ok(j) => j,
+            Err(e) => {
+                warn!("Failed to serialize queue snapshot: {}", e);
+                return;
+            }
+        };
+
+        if self.last_saved_queue_json.as_deref() == Some(json.as_str()) {
+            return;
+        }
+
+        let Some(path) = crate::config::paths::queue_file() else {
+            return;
+        };
+
+        if let Some(parent) = path.parent() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                warn!("Failed to create queue snapshot directory '{}': {}", parent.display(), e);
+                return;
+            }
+        }
+
+        if let Err(e) = std::fs::write(&path, &json) {
+            warn!("Failed to persist queue snapshot '{}': {}", path.display(), e);
+            return;
+        }
+
+        self.last_saved_queue_json = Some(json);
+    }
+
+    fn build_ui_snapshot(state: &AppState) -> UiStateSnapshot {
+        let mut artists_expanded: Vec<String> = state.artists.expanded.iter().cloned().collect();
+        artists_expanded.sort();
+
+        UiStateSnapshot {
+            page_index: state.page.index(),
+            artists_selected_index: state.artists.selected_index,
+            artists_selected_song: state.artists.selected_song,
+            artists_focus: state.artists.focus,
+            artists_tree_scroll_offset: state.artists.tree_scroll_offset,
+            artists_song_scroll_offset: state.artists.song_scroll_offset,
+            artists_expanded,
+            queue_selected: state.queue_state.selected,
+            queue_scroll_offset: state.queue_state.scroll_offset,
+            playlists_selected_playlist: state.playlists.selected_playlist,
+            playlists_selected_song: state.playlists.selected_song,
+            playlists_focus: state.playlists.focus,
+            playlists_playlist_scroll_offset: state.playlists.playlist_scroll_offset,
+            playlists_song_scroll_offset: state.playlists.song_scroll_offset,
+            radio_selected: state.radio.selected,
+            radio_scroll_offset: state.radio.scroll_offset,
+        }
+    }
+
+    async fn load_persisted_ui_state(&mut self) {
+        let Some(path) = crate::config::paths::ui_state_file() else {
+            return;
+        };
+
+        if !path.exists() {
+            return;
+        }
+
+        let contents = match std::fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(e) => {
+                warn!("Failed to read UI snapshot '{}': {}", path.display(), e);
+                return;
+            }
+        };
+
+        let snapshot: UiStateSnapshot = match serde_json::from_str(&contents) {
+            Ok(s) => s,
+            Err(e) => {
+                warn!("Failed to parse UI snapshot '{}': {}", path.display(), e);
+                return;
+            }
+        };
+
+        let mut state = self.state.write().await;
+
+        state.page = Page::from_index(snapshot.page_index);
+
+        state.artists.expanded = snapshot.artists_expanded.into_iter().collect();
+        state.artists.focus = snapshot.artists_focus.min(1);
+        state.artists.tree_scroll_offset = snapshot.artists_tree_scroll_offset;
+        state.artists.song_scroll_offset = snapshot.artists_song_scroll_offset;
+        let artist_tree_len = crate::ui::pages::artists::build_tree_items(&state).len();
+        state.artists.selected_index = snapshot
+            .artists_selected_index
+            .filter(|&idx| idx < artist_tree_len);
+        state.artists.selected_song = snapshot
+            .artists_selected_song
+            .filter(|&idx| idx < state.artists.songs.len());
+
+        state.queue_state.selected = snapshot.queue_selected.filter(|&idx| idx < state.queue.len());
+        state.queue_state.scroll_offset = snapshot.queue_scroll_offset;
+
+        state.playlists.selected_playlist = snapshot
+            .playlists_selected_playlist
+            .filter(|&idx| idx < state.playlists.playlists.len());
+        state.playlists.selected_song = snapshot
+            .playlists_selected_song
+            .filter(|&idx| idx < state.playlists.songs.len());
+        state.playlists.focus = snapshot.playlists_focus.min(1);
+        state.playlists.playlist_scroll_offset = snapshot.playlists_playlist_scroll_offset;
+        state.playlists.song_scroll_offset = snapshot.playlists_song_scroll_offset;
+
+        state.radio.selected = snapshot.radio_selected.filter(|&idx| idx < state.radio.stations.len());
+        state.radio.scroll_offset = snapshot.radio_scroll_offset;
+
+        info!("Restored UI state (page: {})", state.page.label());
+
+        if let Ok(json) = serde_json::to_string(&Self::build_ui_snapshot(&state)) {
+            self.last_saved_ui_state_json = Some(json);
+        }
+    }
+
+    async fn maybe_persist_ui_state(&mut self) {
+        let json = {
+            let state = self.state.read().await;
+            match serde_json::to_string(&Self::build_ui_snapshot(&state)) {
+                Ok(j) => j,
+                Err(e) => {
+                    warn!("Failed to serialize UI snapshot: {}", e);
+                    return;
+                }
+            }
+        };
+
+        if self.last_saved_ui_state_json.as_deref() == Some(json.as_str()) {
+            return;
+        }
+
+        let Some(path) = crate::config::paths::ui_state_file() else {
+            return;
+        };
+
+        if let Some(parent) = path.parent() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                warn!("Failed to create UI snapshot directory '{}': {}", parent.display(), e);
+                return;
+            }
+        }
+
+        if let Err(e) = std::fs::write(&path, &json) {
+            warn!("Failed to persist UI snapshot '{}': {}", path.display(), e);
+            return;
+        }
+
+        self.last_saved_ui_state_json = Some(json);
+    }
+
+    async fn set_song_rating_and_sync(
+        &mut self,
+        song_id: String,
+        rating: u8,
+        title: String,
+    ) -> Result<(), Error> {
+        if rating > 5 {
+            let mut state = self.state.write().await;
+            state.notify_error("Rating must be between 0 and 5");
+            return Ok(());
+        }
+
+        if let Some(ref client) = self.subsonic {
+            match client.set_rating(&song_id, rating).await {
+                Ok(()) => {
+                    let mut state = self.state.write().await;
+                    Self::sync_song_rating_in_state(&mut state, &song_id, rating);
+                    state.notify(format!("Rating: {}/5 - {}", rating, title));
+                }
+                Err(e) => {
+                    let mut state = self.state.write().await;
+                    state.notify_error(format!("Failed to set rating: {}", e));
+                }
+            }
+        } else {
+            let mut state = self.state.write().await;
+            state.notify_error("Server not configured");
+        }
+
+        Ok(())
+    }
+
+    fn sync_song_rating_in_state(state: &mut AppState, song_id: &str, rating: u8) {
+        let new_rating = if rating == 0 { None } else { Some(rating) };
+
+        for song in &mut state.artists.songs {
+            if song.id == song_id {
+                song.user_rating = new_rating;
+            }
+        }
+
+        for song in &mut state.queue {
+            if song.id == song_id {
+                song.user_rating = new_rating;
+            }
+        }
+
+        if let Some(song) = &mut state.now_playing.song {
+            if song.id == song_id {
+                song.user_rating = new_rating;
+            }
+        }
+    }
+
     /// Main event loop
     async fn event_loop(
         &mut self,
         terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     ) -> Result<(), Error> {
         let mut last_playback_update = std::time::Instant::now();
+        let mut last_queue_persist_check = std::time::Instant::now();
 
         loop {
             // Determine tick rate based on whether cava is active
@@ -435,6 +740,13 @@ impl App {
             {
                 let mut state = self.state.write().await;
                 state.check_notification_timeout();
+            }
+
+            // Persist queue snapshot every second if it changed
+            if last_queue_persist_check.elapsed() >= Duration::from_secs(1) {
+                last_queue_persist_check = std::time::Instant::now();
+                self.maybe_persist_queue().await;
+                self.maybe_persist_ui_state().await;
             }
         }
 

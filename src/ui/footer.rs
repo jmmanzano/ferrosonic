@@ -46,7 +46,6 @@ impl<'a> Footer<'a> {
             ("h", "Prev"),
             ("l", "Next"),
             ("t", "Theme"),
-            (",/.", "Seek ±10s"),
             ("⇧←/⇧→", "Seek ±10s"),
         ];
 
@@ -55,7 +54,8 @@ impl<'a> Footer<'a> {
                 binds.extend([
                     ("/", "Filter"),
                     ("←/→", "Focus"),
-                    ("e", "Add"),
+                    ("e", "Add (song/album/artist)"),
+                    ("0-5", "Rating"),
                     ("n", "Add next"),
                     ("Enter", "Play"),
                 ]);
@@ -63,9 +63,11 @@ impl<'a> Footer<'a> {
             Page::Queue => {
                 binds.extend([
                     ("d", "Remove"),
+                    ("0-5", "Rating"),
                     ("J/K", "Move"),
                     ("r", "Shuffle"),
                     ("c", "Clear history"),
+                    ("C", "Clear queue"),
                     ("Enter", "Play"),
                 ]);
             }

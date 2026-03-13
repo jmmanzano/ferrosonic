@@ -79,6 +79,19 @@ pub fn render(frame: &mut Frame, area: Rect, state: &mut AppState) {
     render_songs(frame, chunks[1], state, &colors);
 }
 
+fn song_rating_stars(song: &crate::subsonic::models::Child) -> String {
+    let rating = song
+        .user_rating
+        .map(|r| r.min(5))
+        .or_else(|| {
+            song.average_rating
+                .map(|r| r.round().clamp(0.0, 5.0) as u8)
+        })
+        .unwrap_or(0);
+
+    format!("{}{}", "★".repeat(rating as usize), "☆".repeat((5 - rating) as usize))
+}
+
 /// Render the artist/album tree
 fn render_tree(frame: &mut Frame, area: Rect, state: &mut AppState, colors: &ThemeColors) {
     let artists = &state.artists;
@@ -231,6 +244,7 @@ fn render_songs(frame: &mut Frame, area: Rect, state: &mut AppState, colors: &Th
                     .unwrap_or_default()
             };
             let duration = song.format_duration();
+            let rating = song_rating_stars(song);
             let title = song.title.clone();
 
             // Colors based on state
@@ -251,6 +265,7 @@ fn render_songs(frame: &mut Frame, area: Rect, state: &mut AppState, colors: &Th
                 Span::styled(indicator.to_string(), Style::default().fg(colors.playing)),
                 Span::styled(track, Style::default().fg(track_color)),
                 Span::styled(title, Style::default().fg(title_color)),
+                Span::styled(format!(" {}", rating), Style::default().fg(time_color)),
                 Span::styled(format!(" [{}]", duration), Style::default().fg(time_color)),
             ]);
 

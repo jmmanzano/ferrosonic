@@ -136,6 +136,35 @@ impl App {
                     state.notify("No history to clear");
                 }
             }
+            KeyCode::Char('C') => {
+                // Clear entire queue and stop playback
+                if state.queue.is_empty() {
+                    state.notify("Queue already empty");
+                } else {
+                    drop(state);
+                    self.stop_playback().await?;
+                    let mut state = self.state.write().await;
+                    state.notify("Queue cleared");
+                    return Ok(());
+                }
+            }
+            KeyCode::Char(c) if c.is_ascii_digit() => {
+                let rating = c.to_digit(10).unwrap_or(0) as u8;
+                if rating > 5 {
+                    return Ok(());
+                }
+
+                if let Some(idx) = state.queue_state.selected {
+                    if let Some(song) = state.queue.get(idx).cloned() {
+                        let song_id = song.id;
+                        let title = song.title;
+                        drop(state);
+                        return self.set_song_rating_and_sync(song_id, rating, title).await;
+                    }
+                }
+
+                state.notify_error("Select a song in Queue to set rating");
+            }
             _ => {}
         }
 

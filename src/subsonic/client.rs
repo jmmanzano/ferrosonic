@@ -286,6 +286,38 @@ impl SubsonicClient {
         Ok(data.similar_songs.song)
     }
 
+    /// Set user rating for a song (0 clears rating, 1-5 sets rating)
+    pub async fn set_rating(&self, id: &str, rating: u8) -> Result<(), SubsonicError> {
+        let mut url = self.build_url("setRating")?;
+        url.query_pairs_mut()
+            .append_pair("id", id)
+            .append_pair("rating", &rating.to_string());
+
+        debug!("Setting rating {} for song {}", rating, id);
+
+        let response = self.http.get(url).send().await?;
+        let text = response.text().await?;
+
+        let parsed: SubsonicResponse<PingData> = serde_json::from_str(&text).map_err(|e| {
+            SubsonicError::Parse(format!("Failed to parse setRating response: {}", e))
+        })?;
+
+        if parsed.subsonic_response.status != "ok" {
+            if let Some(error) = parsed.subsonic_response.error {
+                return Err(SubsonicError::Api {
+                    code: error.code,
+                    message: error.message,
+                });
+            }
+            return Err(SubsonicError::Api {
+                code: 0,
+                message: "Unknown error".to_string(),
+            });
+        }
+
+        Ok(())
+    }
+
     /// Get stream URL for a song
     ///
     /// Returns the full URL with authentication that can be passed to MPV

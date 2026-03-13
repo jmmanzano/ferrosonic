@@ -598,6 +598,9 @@ impl App {
             bit_rate: None,
             path: None,
             disc_number: None,
+            user_rating: None,
+            average_rating: None,
+            starred: None,
         };
 
         {

@@ -148,6 +148,12 @@ pub struct Child {
     pub path: Option<String>,
     #[serde(default, rename = "discNumber")]
     pub disc_number: Option<i32>,
+    #[serde(default, rename = "userRating")]
+    pub user_rating: Option<u8>,
+    #[serde(default, rename = "averageRating")]
+    pub average_rating: Option<f32>,
+    #[serde(default)]
+    pub starred: Option<String>,
 }
 
 impl Child {

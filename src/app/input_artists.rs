@@ -244,11 +244,53 @@ impl App {
                             state.notify(format!("Added to queue: {}", title));
                         }
                     }
-                } else if !state.artists.songs.is_empty() {
-                    let count = state.artists.songs.len();
-                    let songs = state.artists.songs.clone();
-                    state.queue.extend(songs);
-                    state.notify(format!("Added {} songs to queue", count));
+                } else {
+                    let tree_items = build_tree_items(&state);
+                    let selected_item = state
+                        .artists
+                        .selected_index
+                        .and_then(|idx| tree_items.get(idx))
+                        .cloned();
+
+                    if let Some(TreeItem::Artist { artist, .. }) = selected_item {
+                        let artist_id = artist.id.clone();
+                        let artist_name = artist.name.clone();
+                        drop(state);
+
+                        if let Some(ref client) = self.subsonic {
+                            match client.get_artist(&artist_id).await {
+                                Ok((_artist, albums)) => {
+                                    let mut songs = Vec::new();
+                                    for album in albums {
+                                        if let Ok((_album, mut album_songs)) = client.get_album(&album.id).await {
+                                            songs.append(&mut album_songs);
+                                        }
+                                    }
+
+                                    let mut state = self.state.write().await;
+                                    if songs.is_empty() {
+                                        state.notify_error(format!("No songs found for {}", artist_name));
+                                    } else {
+                                        let count = songs.len();
+                                        state.queue.extend(songs);
+                                        state.notify(format!("Added {} songs from {}", count, artist_name));
+                                    }
+                                }
+                                Err(e) => {
+                                    let mut state = self.state.write().await;
+                                    state.notify_error(format!("Failed to load artist: {}", e));
+                                }
+                            }
+                        }
+                        return Ok(());
+                    }
+
+                    if !state.artists.songs.is_empty() {
+                        let count = state.artists.songs.len();
+                        let songs = state.artists.songs.clone();
+                        state.queue.extend(songs);
+                        state.notify(format!("Added {} songs to queue", count));
+                    }
                 }
             }
             KeyCode::Char('n') => {
@@ -269,6 +311,25 @@ impl App {
                     }
                     state.notify(format!("Playing {} songs next", count));
                 }
+            }
+            KeyCode::Char(c) if c.is_ascii_digit() => {
+                let rating = c.to_digit(10).unwrap_or(0) as u8;
+                if rating > 5 {
+                    return Ok(());
+                }
+
+                if state.artists.focus == 1 {
+                    if let Some(idx) = state.artists.selected_song {
+                        if let Some(song) = state.artists.songs.get(idx).cloned() {
+                            let song_id = song.id;
+                            let title = song.title;
+                            drop(state);
+                            return self.set_song_rating_and_sync(song_id, rating, title).await;
+                        }
+                    }
+                }
+
+                state.notify_error("Select a song in Artists to set rating");
             }
             _ => {}
         }

@@ -121,16 +121,6 @@ impl App {
                     let _ = self.audio_seek_relative(10.0);
                     return Ok(());
                 }
-                (KeyCode::Char(','), KeyModifiers::NONE) => {
-                    drop(state);
-                    let _ = self.audio_seek_relative(-10.0);
-                    return Ok(());
-                }
-                (KeyCode::Char('.'), KeyModifiers::NONE) => {
-                    drop(state);
-                    let _ = self.audio_seek_relative(10.0);
-                    return Ok(());
-                }
             // Cycle theme (global)
             (KeyCode::Char('t'), KeyModifiers::NONE) => {
                 state.settings_state.next_theme();

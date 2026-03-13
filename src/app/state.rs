@@ -25,6 +25,19 @@ pub enum Page {
 }
 
 impl Page {
+    pub fn from_index(index: usize) -> Self {
+        match index {
+            0 => Page::Artists,
+            1 => Page::Queue,
+            2 => Page::Playlists,
+            3 => Page::Radio,
+            4 => Page::Server,
+            5 => Page::Settings,
+            6 => Page::Equalizer,
+            _ => Page::Artists,
+        }
+    }
+
     pub fn index(&self) -> usize {
         match self {
             Page::Artists => 0,
