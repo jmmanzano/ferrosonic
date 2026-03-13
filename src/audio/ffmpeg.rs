@@ -486,13 +486,24 @@ impl FfmpegController {
     }
 
     pub fn seek(&mut self, _position: f64) -> Result<(), AudioError> {
-        warn!("Seek not supported in FFmpeg backend");
-        Ok(())
+        let position = _position.max(0.0);
+        let was_paused = self.paused.load(Ordering::SeqCst);
+
+        if let Some(url) = self.current_url.clone() {
+            self.loadfile_at_position(&url, position)?;
+            if was_paused {
+                self.pause()?;
+            }
+            Ok(())
+        } else {
+            warn!("Seek requested in FFmpeg backend without an active stream");
+            Ok(())
+        }
     }
 
     pub fn seek_relative(&mut self, _offset: f64) -> Result<(), AudioError> {
-        warn!("Seek not supported in FFmpeg backend");
-        Ok(())
+        let position = (self.get_time_pos()? + _offset).max(0.0);
+        self.seek(position)
     }
 
     pub fn loadfile_append(&mut self, _path: &str) -> Result<(), AudioError> {

@@ -14,6 +14,9 @@ impl App {
             MouseEventKind::Down(MouseButton::Left) => {
                 self.handle_mouse_click(x, y).await
             }
+            MouseEventKind::Drag(MouseButton::Left) => {
+                self.handle_mouse_click(x, y).await
+            }
             MouseEventKind::ScrollUp => {
                 self.handle_mouse_scroll_up().await
             }
@@ -28,11 +31,15 @@ impl App {
     async fn handle_mouse_click(&mut self, x: u16, y: u16) -> Result<(), Error> {
         use crate::ui::header::{Header, HeaderRegion};
 
-        let state = self.state.read().await;
-        let layout = state.layout.clone();
-        let page = state.page;
-        let duration = state.now_playing.duration;
-        drop(state);
+        let (layout, page, duration, position) = {
+            let state = self.state.read().await;
+            (
+                state.layout.clone(),
+                state.page,
+                state.now_playing.duration,
+                state.now_playing.position,
+            )
+        };
 
         // Check header area
         if y >= layout.header.y && y < layout.header.y + layout.header.height {
@@ -66,17 +73,25 @@ impl App {
         if y >= layout.now_playing.y && y < layout.now_playing.y + layout.now_playing.height {
             let inner_bottom = layout.now_playing.y + layout.now_playing.height - 2;
             if y == inner_bottom && duration > 0.0 {
-                let inner_x_start = layout.now_playing.x + 1;
+                let inner_x = layout.now_playing.x + 1;
                 let inner_width = layout.now_playing.width.saturating_sub(2);
-                if inner_width > 15 && x >= inner_x_start {
-                    let rel_x = x - inner_x_start;
-                    let time_width = 15u16;
-                    let bar_width = inner_width.saturating_sub(time_width + 2);
-                    let bar_start = (inner_width.saturating_sub(time_width + 2 + bar_width)) / 2 + time_width + 2;
-                    if bar_width > 0 && rel_x >= bar_start && rel_x < bar_start + bar_width {
-                        let fraction = (rel_x - bar_start) as f64 / bar_width as f64;
-                        let seek_pos = fraction * duration;
-                        let _ = self.mpv.seek(seek_pos);
+                if inner_width > 15 {
+                    // Replicar geometría exacta de render_progress_bar en now_playing.rs
+                    use crate::app::state::format_duration;
+                    let time_str = format!(
+                        "{} / {}",
+                        format_duration(position),
+                        format_duration(duration)
+                    );
+                    let time_width = time_str.len() as u16;
+                    let bar_width = inner_width.saturating_sub(time_width + 3);
+                    let total_width = time_width + 2 + bar_width;
+                    let start_x = inner_x + inner_width.saturating_sub(total_width) / 2;
+                    let bar_start = start_x + time_width + 2;
+                    if bar_width > 0 && x >= bar_start && x < bar_start + bar_width {
+                        let fraction = (x - bar_start) as f64 / bar_width as f64;
+                        let seek_pos = (fraction * duration).clamp(0.0, duration);
+                        let _ = self.audio_seek(seek_pos);
                         let mut state = self.state.write().await;
                         state.now_playing.position = seek_pos;
                     }

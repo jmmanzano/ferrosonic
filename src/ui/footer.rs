@@ -46,6 +46,8 @@ impl<'a> Footer<'a> {
             ("h", "Prev"),
             ("l", "Next"),
             ("t", "Theme"),
+            (",/.", "Seek ±10s"),
+            ("⇧←/⇧→", "Seek ±10s"),
         ];
 
         match self.page {

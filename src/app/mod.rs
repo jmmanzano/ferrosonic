@@ -25,6 +25,10 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+#[cfg(not(windows))]
+use crossterm::event::{
+    KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+};
 use ratatui::{backend::CrosstermBackend, Terminal};
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
@@ -243,6 +247,18 @@ impl App {
         // Setup terminal
         enable_raw_mode().map_err(UiError::TerminalInit)?;
         let mut stdout = io::stdout();
+        #[cfg(not(windows))]
+        execute!(
+            stdout,
+            EnterAlternateScreen,
+            EnableMouseCapture,
+            PushKeyboardEnhancementFlags(
+                KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
+                    | KeyboardEnhancementFlags::REPORT_EVENT_TYPES
+            )
+        )
+            .map_err(UiError::TerminalInit)?;
+        #[cfg(windows)]
         execute!(stdout, EnterAlternateScreen, EnableMouseCapture)
             .map_err(UiError::TerminalInit)?;
         let backend = CrosstermBackend::new(stdout);
@@ -267,11 +283,16 @@ impl App {
 
         // Cleanup terminal
         disable_raw_mode().map_err(UiError::TerminalInit)?;
+        #[cfg(not(windows))]
         execute!(
             terminal.backend_mut(),
             LeaveAlternateScreen,
-            DisableMouseCapture
+            DisableMouseCapture,
+            PopKeyboardEnhancementFlags
         )
+            .map_err(UiError::TerminalInit)?;
+        #[cfg(windows)]
+        execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)
             .map_err(UiError::TerminalInit)?;
         terminal.show_cursor().map_err(UiError::Render)?;
 

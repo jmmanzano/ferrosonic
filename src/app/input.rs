@@ -110,6 +110,27 @@ impl App {
                 drop(state);
                 return self.prev_track().await;
             }
+                // Seek backward/forward 10 seconds (Shift+Left / Shift+Right)
+                (KeyCode::Left, KeyModifiers::SHIFT) => {
+                    drop(state);
+                    let _ = self.audio_seek_relative(-10.0);
+                    return Ok(());
+                }
+                (KeyCode::Right, KeyModifiers::SHIFT) => {
+                    drop(state);
+                    let _ = self.audio_seek_relative(10.0);
+                    return Ok(());
+                }
+                (KeyCode::Char(','), KeyModifiers::NONE) => {
+                    drop(state);
+                    let _ = self.audio_seek_relative(-10.0);
+                    return Ok(());
+                }
+                (KeyCode::Char('.'), KeyModifiers::NONE) => {
+                    drop(state);
+                    let _ = self.audio_seek_relative(10.0);
+                    return Ok(());
+                }
             // Cycle theme (global)
             (KeyCode::Char('t'), KeyModifiers::NONE) => {
                 state.settings_state.next_theme();
