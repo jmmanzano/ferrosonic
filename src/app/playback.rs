@@ -81,6 +81,34 @@ impl App {
 }
 
 impl App {
+    fn song_passes_min_queue_rating(song: &crate::subsonic::models::Child, min_rating: u8) -> bool {
+        if min_rating == 0 {
+            return true;
+        }
+
+        match song.user_rating {
+            Some(rating) => rating >= min_rating,
+            None => true,
+        }
+    }
+
+    async fn find_next_playable_position_from(&self, start: usize) -> Option<usize> {
+        let state = self.state.read().await;
+        let min_rating = state.queue_state.min_playback_rating.min(5);
+
+        (start..state.queue.len())
+            .find(|&idx| Self::song_passes_min_queue_rating(&state.queue[idx], min_rating))
+    }
+
+    async fn find_prev_playable_position_before(&self, before: usize) -> Option<usize> {
+        let state = self.state.read().await;
+        let min_rating = state.queue_state.min_playback_rating.min(5);
+
+        (0..before)
+            .rev()
+            .find(|&idx| Self::song_passes_min_queue_rating(&state.queue[idx], min_rating))
+    }
+
     async fn maybe_extend_queue_with_similar(&mut self) {
         let non_stop_mode = {
             let state = self.state.read().await;
@@ -181,9 +209,14 @@ impl App {
             {
                 let state = self.state.read().await;
                 let time_remaining = state.now_playing.duration - state.now_playing.position;
+                let min_rating = state.queue_state.min_playback_rating.min(5);
                 let has_next = state
                     .queue_position
-                    .map(|p| p + 1 < state.queue.len())
+                    .map(|p| {
+                        ((p + 1)..state.queue.len()).any(|idx| {
+                            Self::song_passes_min_queue_rating(&state.queue[idx], min_rating)
+                        })
+                    })
                     .unwrap_or(false);
                 drop(state);
 
@@ -202,8 +235,12 @@ impl App {
             if let Ok(count) = self.audio_get_playlist_count() {
                 if count == 1 {
                     let state = self.state.read().await;
+                    let min_rating = state.queue_state.min_playback_rating.min(5);
                     if let Some(pos) = state.queue_position {
-                        if pos + 1 < state.queue.len() {
+                        let has_next_playable = ((pos + 1)..state.queue.len()).any(|idx| {
+                            Self::song_passes_min_queue_rating(&state.queue[idx], min_rating)
+                        });
+                        if has_next_playable {
                             drop(state);
                             debug!("Playlist count is 1, re-preloading next track");
                             self.preload_next_track(pos).await;
@@ -218,8 +255,11 @@ impl App {
                     // Gapless advance happened - update our state to match
                     let state = self.state.read().await;
                     if let Some(current_pos) = state.queue_position {
-                        let next_pos = current_pos + 1;
-                        if next_pos < state.queue.len() {
+                        let min_rating = state.queue_state.min_playback_rating.min(5);
+                        let next_pos = ((current_pos + 1)..state.queue.len()).find(|&idx| {
+                            Self::song_passes_min_queue_rating(&state.queue[idx], min_rating)
+                        });
+                        if let Some(next_pos) = next_pos {
                             drop(state);
                             info!("Gapless advancement to track {}", next_pos);
 
@@ -411,14 +451,24 @@ impl App {
             return Ok(());
         }
 
-        let next_pos = match current_pos {
-            Some(pos) if pos + 1 < queue_len => pos + 1,
-            _ => {
-                info!("Reached end of queue");
+        let Some(current_pos) = current_pos else {
+            info!("Reached end of queue");
+            let _ = self.audio_stop();
+            let mut state = self.state.write().await;
+            state.now_playing.state = PlaybackState::Stopped;
+            state.now_playing.position = 0.0;
+            return Ok(());
+        };
+
+        let next_pos = match self.find_next_playable_position_from(current_pos + 1).await {
+            Some(pos) => pos,
+            None => {
+                info!("Reached end of playable queue for current rating filter");
                 let _ = self.audio_stop();
                 let mut state = self.state.write().await;
                 state.now_playing.state = PlaybackState::Stopped;
                 state.now_playing.position = 0.0;
+                state.notify("No more playable songs for the current min rating filter");
                 return Ok(());
             }
         };
@@ -441,7 +491,9 @@ impl App {
         if position < 3.0 {
             if let Some(pos) = current_pos {
                 if pos > 0 {
-                    return self.play_queue_position(pos - 1).await;
+                    if let Some(prev_pos) = self.find_prev_playable_position_before(pos).await {
+                        return self.play_queue_position(prev_pos).await;
+                    }
                 }
             }
             if let Err(e) = self.audio_seek(0.0) {
@@ -465,8 +517,14 @@ impl App {
 
     /// Play a specific position in the queue
     pub(super) async fn play_queue_position(&mut self, pos: usize) -> Result<(), Error> {
+        let Some(play_pos) = self.find_next_playable_position_from(pos).await else {
+            let mut state = self.state.write().await;
+            state.notify("No playable songs match current min rating filter");
+            return Ok(());
+        };
+
         let state = self.state.read().await;
-        let song = match state.queue.get(pos) {
+        let song = match state.queue.get(play_pos) {
             Some(s) => s.clone(),
             None => return Ok(()),
         };
@@ -488,7 +546,7 @@ impl App {
 
         {
             let mut state = self.state.write().await;
-            state.queue_position = Some(pos);
+            state.queue_position = Some(play_pos);
             state.now_playing.song = Some(song.clone());
             state.now_playing.state = PlaybackState::Playing;
             state.now_playing.position = 0.0;
@@ -501,7 +559,7 @@ impl App {
 
         self.last_auto_similar_seed_id = None;
 
-        info!("Playing: {} (queue pos {})", song.title, pos);
+        info!("Playing: {} (queue pos {})", song.title, play_pos);
         if self.audio_is_paused().unwrap_or(false) {
             let _ = self.audio_resume();
         }
@@ -512,7 +570,7 @@ impl App {
             return Ok(());
         }
 
-        self.preload_next_track(pos).await;
+        self.preload_next_track(play_pos).await;
 
         Ok(())
     }
@@ -520,11 +578,14 @@ impl App {
     /// Pre-load the next track into MPV's playlist for gapless playback
     pub(super) async fn preload_next_track(&mut self, current_pos: usize) {
         let state = self.state.read().await;
-        let next_pos = current_pos + 1;
+        let min_rating = state.queue_state.min_playback_rating.min(5);
+        let next_pos = ((current_pos + 1)..state.queue.len()).find(|&idx| {
+            Self::song_passes_min_queue_rating(&state.queue[idx], min_rating)
+        });
 
-        if next_pos >= state.queue.len() {
+        let Some(next_pos) = next_pos else {
             return;
-        }
+        };
 
         let next_song = match state.queue.get(next_pos) {
             Some(s) => s.clone(),

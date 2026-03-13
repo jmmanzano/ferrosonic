@@ -107,6 +107,8 @@ struct UiStateSnapshot {
     artists_expanded: Vec<String>,
     queue_selected: Option<usize>,
     queue_scroll_offset: usize,
+    #[serde(default)]
+    queue_min_playback_rating: u8,
     playlists_selected_playlist: Option<usize>,
     playlists_selected_song: Option<usize>,
     playlists_focus: usize,
@@ -495,6 +497,7 @@ impl App {
             artists_expanded,
             queue_selected: state.queue_state.selected,
             queue_scroll_offset: state.queue_state.scroll_offset,
+            queue_min_playback_rating: state.queue_state.min_playback_rating.min(5),
             playlists_selected_playlist: state.playlists.selected_playlist,
             playlists_selected_song: state.playlists.selected_song,
             playlists_focus: state.playlists.focus,
@@ -548,6 +551,7 @@ impl App {
 
         state.queue_state.selected = snapshot.queue_selected.filter(|&idx| idx < state.queue.len());
         state.queue_state.scroll_offset = snapshot.queue_scroll_offset;
+        state.queue_state.min_playback_rating = snapshot.queue_min_playback_rating.min(5);
 
         state.playlists.selected_playlist = snapshot
             .playlists_selected_playlist

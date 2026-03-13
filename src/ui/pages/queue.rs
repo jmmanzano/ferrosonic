@@ -28,9 +28,15 @@ fn song_rating_stars(song: &crate::subsonic::models::Child) -> String {
 pub fn render(frame: &mut Frame, area: Rect, state: &mut AppState) {
     let colors = *state.settings_state.theme_colors();
 
+    let filter_suffix = if state.queue_state.min_playback_rating > 0 {
+        format!(" | min {}+", state.queue_state.min_playback_rating)
+    } else {
+        String::new()
+    };
+
     let block = Block::default()
         .borders(Borders::ALL)
-        .title(format!(" Queue ({}) ", state.queue.len()))
+        .title(format!(" Queue ({}){} ", state.queue.len(), filter_suffix))
         .border_style(Style::default().fg(colors.border_focused));
 
     if state.queue.is_empty() {

@@ -64,6 +64,7 @@ impl<'a> Footer<'a> {
                 binds.extend([
                     ("d", "Remove"),
                     ("0-5", "Rating"),
+                    ("f/F", "Min rating"),
                     ("J/K", "Move"),
                     ("r", "Shuffle"),
                     ("c", "Clear history"),

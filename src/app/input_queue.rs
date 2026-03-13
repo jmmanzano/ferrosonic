@@ -113,6 +113,36 @@ impl App {
                 }
                 state.notify("Queue shuffled");
             }
+            KeyCode::Char('f') => {
+                // Increase minimum playback rating filter (wrap 5 -> 0)
+                state.queue_state.min_playback_rating = if state.queue_state.min_playback_rating >= 5 {
+                    0
+                } else {
+                    state.queue_state.min_playback_rating + 1
+                };
+
+                let min = state.queue_state.min_playback_rating;
+                if min == 0 {
+                    state.notify("Queue min rating filter: off (unrated allowed)");
+                } else {
+                    state.notify(format!("Queue min rating filter: {}+ (unrated allowed)", min));
+                }
+            }
+            KeyCode::Char('F') => {
+                // Decrease minimum playback rating filter (wrap 0 -> 5)
+                state.queue_state.min_playback_rating = if state.queue_state.min_playback_rating == 0 {
+                    5
+                } else {
+                    state.queue_state.min_playback_rating - 1
+                };
+
+                let min = state.queue_state.min_playback_rating;
+                if min == 0 {
+                    state.notify("Queue min rating filter: off (unrated allowed)");
+                } else {
+                    state.notify(format!("Queue min rating filter: {}+ (unrated allowed)", min));
+                }
+            }
             KeyCode::Char('c') => {
                 // Clear history (remove all songs before current position)
                 if let Some(pos) = state.queue_position {

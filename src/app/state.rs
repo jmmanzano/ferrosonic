@@ -171,6 +171,9 @@ pub struct QueueState {
     pub selected: Option<usize>,
     /// Scroll offset for the queue list (set after render)
     pub scroll_offset: usize,
+    /// Minimum user rating required for playback (0 = disabled).
+    /// Unrated songs are always allowed.
+    pub min_playback_rating: u8,
 }
 
 /// Playlists page state
