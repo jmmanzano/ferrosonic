@@ -1,6 +1,7 @@
 //! Subsonic authentication helpers
 
-use rand::Rng;
+
+use rand::RngExt as _;
 
 /// Generate authentication parameters for Subsonic API requests
 ///
@@ -15,10 +16,10 @@ pub fn generate_auth_params(password: &str) -> (String, String) {
 
 /// Generate a random salt string
 fn generate_salt() -> String {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     (0..16)
         .map(|_| {
-            let idx = rng.gen_range(0..36);
+            let idx = rng.random_range(0..36u8);
             if idx < 10 {
                 (b'0' + idx) as char
             } else {

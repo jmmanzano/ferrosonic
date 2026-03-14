@@ -23,3 +23,5 @@ Thumbs.db
 config.toml
 
 rust-toolchain.toml
+.github/agents/
+PLAN_MEJORAS_CALIDAD.md

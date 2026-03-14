@@ -149,13 +149,13 @@ impl FfmpegController {
 
         let config = StreamConfig {
             channels: 2,
-            sample_rate: cpal::SampleRate(48000),
+            sample_rate: 48000,
             buffer_size: cpal::BufferSize::Default,
         };
 
         info!(
             "FFmpeg audio backend started (CPAL device: {})",
-            device.name().unwrap_or_else(|_| "Unknown".to_string())
+            device.description().map(|d| d.name().to_string()).unwrap_or_else(|_| "Unknown".to_string())
         );
 
         self.device = Some(device);
@@ -243,6 +243,7 @@ impl FfmpegController {
                 move |err| {
                     warn!("CPAL stream error: {}", err);
                 },
+                None,
             )
             .map_err(|e| AudioError::MpvIpc(format!("Failed to build stream: {}", e)))?;
 

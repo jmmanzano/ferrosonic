@@ -262,6 +262,8 @@ pub struct SettingsState {
     pub equalizer_presets: Vec<EqualizerPreset>,
     /// Selected equalizer preset index
     pub equalizer_preset_index: usize,
+    /// Desktop notifications when a song changes
+    pub notifications_enabled: bool,
 }
 
 impl Default for SettingsState {
@@ -280,6 +282,7 @@ impl Default for SettingsState {
                 bands: [0.0; 10],
             }],
             equalizer_preset_index: 0,
+            notifications_enabled: false,
         }
     }
 }
@@ -458,6 +461,7 @@ impl AppState {
         state.settings_state.audio_backend = audio_backend;
         state.settings_state.non_stop_mode = config.non_stop_mode;
         state.settings_state.equalizer_enabled = config.equalizer_enabled;
+        state.settings_state.notifications_enabled = config.notifications_enabled;
         state
     }
 

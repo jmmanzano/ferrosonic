@@ -152,7 +152,7 @@ impl App {
                 use rand::seq::SliceRandom;
                 if !state.playlists.songs.is_empty() {
                     let mut songs = state.playlists.songs.clone();
-                    songs.shuffle(&mut rand::thread_rng());
+                    songs.shuffle(&mut rand::rng());
                     state.queue.clear();
                     state.queue.extend(songs);
                     drop(state);
