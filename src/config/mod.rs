@@ -44,6 +44,9 @@ pub struct Config {
     pub equalizer_enabled: bool,
     #[serde(rename = "EqualizerPreset", default = "Config::default_equalizer_preset")]
     pub equalizer_preset: String,
+    /// Enable desktop notifications when a song changes
+    #[serde(rename = "Notifications", default)]
+    pub notifications_enabled: bool,
 }
 
 impl Config {

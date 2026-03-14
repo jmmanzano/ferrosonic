@@ -265,16 +265,25 @@ impl App {
 
                             // Update state - keep audio properties since they'll be similar
                             // for gapless transitions (same album, same format)
-                            let mut state = self.state.write().await;
-                            state.queue_position = Some(next_pos);
-                            if let Some(song) = state.queue.get(next_pos).cloned() {
-                                state.now_playing.song = Some(song.clone());
-                                state.now_playing.position = 0.0;
-                                state.now_playing.duration = song.duration.unwrap_or(0) as f64;
-                                // Don't reset audio properties - let them update naturally
-                                // This avoids triggering PipeWire rate changes unnecessarily
+                            let (gapless_song, notifications_enabled) = {
+                                let mut state = self.state.write().await;
+                                state.queue_position = Some(next_pos);
+                                let song = state.queue.get(next_pos).cloned();
+                                if let Some(ref s) = song {
+                                    state.now_playing.song = Some(s.clone());
+                                    state.now_playing.position = 0.0;
+                                    state.now_playing.duration = s.duration.unwrap_or(0) as f64;
+                                    // Don't reset audio properties - let them update naturally
+                                    // This avoids triggering PipeWire rate changes unnecessarily
+                                }
+                                (song, state.settings_state.notifications_enabled)
+                            };
+
+                            if let Some(ref song) = gapless_song {
+                                if notifications_enabled {
+                                    Self::send_song_notification(song);
+                                }
                             }
-                            drop(state);
 
                             // Remove the finished track (index 0) from MPV's playlist
                             // This is less disruptive than playlist_clear during playback
@@ -544,7 +553,7 @@ impl App {
             return Ok(());
         };
 
-        {
+        let notifications_enabled = {
             let mut state = self.state.write().await;
             state.queue_position = Some(play_pos);
             state.now_playing.song = Some(song.clone());
@@ -555,6 +564,11 @@ impl App {
             state.now_playing.bit_depth = None;
             state.now_playing.format = None;
             state.now_playing.channels = None;
+            state.settings_state.notifications_enabled
+        };
+
+        if notifications_enabled {
+            Self::send_song_notification(&song);
         }
 
         self.last_auto_similar_seed_id = None;
@@ -693,5 +707,21 @@ impl App {
         let mut state = self.state.write().await;
         state.notify(format!("Playing: {}", station.name));
         Ok(())
+    }
+
+    /// Send a desktop notification for the currently playing song.
+    /// Does nothing if notifications are disabled or the OS call fails.
+    pub(super) fn send_song_notification(song: &crate::subsonic::models::Child) {
+        let summary = "Now Playing".to_string();
+        let body = match &song.artist {
+            Some(artist) => format!("{}\n{}", song.title, artist),
+            None => song.title.clone(),
+        };
+        std::thread::spawn(move || {
+            let _ = notify_rust::Notification::new()
+                .summary(&summary)
+                .body(&body)
+                .show();
+        });
     }
 }

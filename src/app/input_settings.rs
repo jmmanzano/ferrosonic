@@ -22,7 +22,7 @@ impl App {
                     }
                 }
                 KeyCode::Down | KeyCode::Char('j') => {
-                    if field < 5 {
+                    if field < 6 {
                         state.settings_state.selected_field = field + 1;
                     }
                 }
@@ -82,6 +82,13 @@ impl App {
                         config_changed = true;
                         equalizer_changed = true;
                     }
+                    6 => {
+                        state.settings_state.notifications_enabled = !state.settings_state.notifications_enabled;
+                        state.config.notifications_enabled = state.settings_state.notifications_enabled;
+                        let status = if state.settings_state.notifications_enabled { "On" } else { "Off" };
+                        state.notify(format!("Notifications: {}", status));
+                        config_changed = true;
+                    }
                     _ => {}
                 },
                 // Right / Enter / Space
@@ -140,6 +147,13 @@ impl App {
                             state.notify(format!("Equalizer: {} ({})", status, preset_name));
                             config_changed = true;
                             equalizer_changed = true;
+                        }
+                        6 => {
+                            state.settings_state.notifications_enabled = !state.settings_state.notifications_enabled;
+                            state.config.notifications_enabled = state.settings_state.notifications_enabled;
+                            let status = if state.settings_state.notifications_enabled { "On" } else { "Off" };
+                            state.notify(format!("Notifications: {}", status));
+                            config_changed = true;
                         }
                         _ => {}
                     }

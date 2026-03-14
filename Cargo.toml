@@ -49,6 +49,9 @@ futures = "0.3"
 # Terminal emulator for cava integration
 vt100 = "0.15"
 
+# Desktop notifications (Linux via D-Bus, Windows via WinRT)
+notify-rust = "4"
+
 # Audio output - direct hardware access with better streaming support
 cpal = "0.13"
 
