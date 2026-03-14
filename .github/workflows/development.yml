@@ -1,0 +1,86 @@
+name: Development CI
+
+on:
+  push:
+    branches:
+      - development
+  pull_request:
+    branches:
+      - development
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  windows:
+    name: Windows build
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release binary
+        run: cargo build --release --locked
+
+      - name: Upload Windows binary
+        uses: actions/upload-artifact@v6
+        with:
+          name: ferrosonic-dev-windows-x86_64
+          path: target/release/ferrosonic.exe
+          if-no-files-found: error
+
+  linux:
+    name: Linux build + deb
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pkg-config \
+            libssl-dev \
+            libdbus-1-dev \
+            libasound2-dev
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release binary
+        run: cargo build --release --locked
+
+      - name: Install cargo-deb
+        run: cargo install cargo-deb --locked
+
+      - name: Build deb package
+        run: cargo deb --no-build --no-strip
+
+      - name: Upload Linux binary
+        uses: actions/upload-artifact@v6
+        with:
+          name: ferrosonic-dev-linux-x86_64
+          path: target/release/ferrosonic
+          if-no-files-found: error
+
+      - name: Upload deb package
+        uses: actions/upload-artifact@v6
+        with:
+          name: ferrosonic-dev-linux-deb
+          path: target/debian/*.deb
+          if-no-files-found: error
