@@ -13,7 +13,10 @@ Ferrosonic is inspired by [Termsonic](https://git.sixfoisneuf.fr/termsonic/about
 - **Playlist support** - Browse and play server playlists with shuffle capability
 - **Internet radio** - Browse and play internet radio stations configured on your Subsonic server
 - **Play queue management** - Add, remove, reorder, shuffle, and clear queue history
+- **Song ratings (Subsonic)** - Set per-song user ratings (0-5) from Artists and Queue views
+- **Minimum rating playback filter** - Skip low-rated songs in queue playback while still allowing unrated songs
 - **Non-stop mode** - When enabled, auto-extends the queue with 10 similar songs from Subsonic while the last queued track is playing
+- **Session persistence** - Restores queue and UI selection/scroll state between runs
 - **Audio quality display** - Real-time display of sample rate, bit depth, codec format, and channel layout
 - **Audio backend selection** - Choose between MPV and FFmpeg+CPAL audio backends
 - **Audio visualizer** - Integrated cava audio visualizer with theme-matched gradient colors and adjustable size
@@ -50,6 +53,30 @@ Supports Arch, Fedora, and Debian/Ubuntu. Installs runtime dependencies, downloa
 ```bash
 curl -sSf https://raw.githubusercontent.com/jaidaken/ferrosonic/master/install.sh | sh
 ```
+
+### Prebuilt Release Assets
+
+- **Linux binary**: `ferrosonic-linux-x86_64`
+- **Linux Debian package**: `.deb` includes desktop entry and application icon for launcher integration
+- **Windows zip**: `ferrosonic-windows-x86_64.zip` contains:
+	- `ferrosonic.exe`
+	- `install.bat` (installer script)
+	- `ferrosonic.png` (shortcut icon source)
+
+The Windows installer script:
+
+- Installs to `%LOCALAPPDATA%\Ferrosonic` by default (or a custom directory passed as argument)
+- Checks whether `ffmpeg` exists in `PATH`
+- Downloads and installs FFmpeg automatically if missing
+- Adds install and FFmpeg paths to user `PATH`
+- Creates Start Menu and Desktop shortcuts with icon
+- Launches Ferrosonic automatically after install
+
+### Windows Quick Start
+
+1. Download `ferrosonic-windows-x86_64.zip` from the latest release.
+2. Extract the zip to any folder.
+3. Run `install.bat` (double-click or execute in `cmd`/PowerShell).
 
 ### Build from Source
 
@@ -113,6 +140,7 @@ Logs are written to `~/.config/ferrosonic/ferrosonic.log`.
 | `p` / `Space` | Toggle play/pause |
 | `l` | Next track |
 | `h` | Previous track |
+| `Shift+Left` / `Shift+Right` | Seek -10s / +10s |
 | `Ctrl+R` | Refresh data from server |
 | `t` | Cycle to next theme |
 | `F1` | Artists page |
@@ -121,6 +149,7 @@ Logs are written to `~/.config/ferrosonic/ferrosonic.log`.
 | `F4` | Radio page |
 | `F5` | Server configuration page |
 | `F6` | Settings page |
+| `F7` | Equalizer page |
 
 ### Artists Page (F1)
 
@@ -135,6 +164,7 @@ Logs are written to `~/.config/ferrosonic/ferrosonic.log`.
 | `Enter` | Expand/collapse artist, or play album/song |
 | `Backspace` | Return to tree from song list |
 | `e` | Add selected item to end of queue |
+| `0-5` | Set selected song rating (0 clears rating) |
 | `n` | Add selected item as next in queue |
 
 ### Queue Page (F2)
@@ -148,7 +178,12 @@ Logs are written to `~/.config/ferrosonic/ferrosonic.log`.
 | `J` (Shift+J) | Move selected song down |
 | `K` (Shift+K) | Move selected song up |
 | `r` | Shuffle queue (current song stays in place) |
+| `f` / `F` | Increase / decrease minimum playback rating filter |
 | `c` | Clear played history (remove songs before current) |
+| `C` | Clear entire queue and stop playback |
+| `0-5` | Set selected song rating (0 clears rating) |
+
+When the minimum rating filter is enabled, unrated songs are still allowed.
 
 ### Playlists Page (F3)
 
@@ -188,14 +223,26 @@ Logs are written to `~/.config/ferrosonic/ferrosonic.log`.
 | `Left` / `h` | Previous option |
 | `Right` / `l` / `Enter` / `Space` | Next option |
 
-Settings include theme selection, cava visualizer toggle, cava size adjustment, audio backend selection (MPV / FFmpeg), and Non-stop mode toggle. Changes are saved automatically.
+Settings include theme selection, cava visualizer toggle, cava size adjustment, audio backend selection (MPV / FFmpeg), Non-stop mode toggle, and equalizer options. Changes are saved automatically.
+
+### Equalizer Page (F7)
+
+| Key | Action |
+|---|---|
+| `Up` / `k` | Previous preset |
+| `Down` / `j` | Next preset |
+| `Left` / `h` | Cycle preset backward |
+| `Right` / `l` | Cycle preset forward |
+| `Enter` / `Space` | Toggle equalizer on/off |
 
 ## Mouse Support
 
 - Click page tabs in the header to switch pages
 - Click playback control buttons (Previous, Play, Pause, Stop, Next) in the header
-- Click items in lists to select them
-- Click the progress bar in the Now Playing widget to seek
+- Click list items to select them
+- Double-click queue/radio items to play immediately
+- Use mouse wheel to move selection in lists
+- Click or drag the progress bar in the Now Playing widget to seek
 
 ## Audio Features
 

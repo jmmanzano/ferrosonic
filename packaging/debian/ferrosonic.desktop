@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Ferrosonic
+GenericName=Subsonic Music Client
+Comment=Terminal-based Subsonic music client
+Exec=ferrosonic
+Icon=ferrosonic
+Terminal=true
+Categories=AudioVideo;Audio;Player;
+Keywords=music;subsonic;audio;terminal;
+StartupNotify=false
