@@ -4,9 +4,6 @@ on:
   push:
     branches:
       - master
-  pull_request:
-    branches:
-      - master
 
 permissions:
   contents: write
@@ -181,14 +178,60 @@ jobs:
           echo "Next version: ${next_version}"
 
           sed -E -i "0,/^version\s*=\s*\"[^\"]+\"/s//version = \"${next_version}\"/" Cargo.toml
+          perl -0777 -i -pe 's/(\[\[package\]\]\nname = "ferrosonic"\nversion = )"[^"]+"/$1"'"${next_version}"'"/' Cargo.lock
 
-          if git diff --quiet Cargo.toml; then
-            echo "No changes in Cargo.toml"
+          if git diff --quiet Cargo.toml Cargo.lock; then
+            echo "No changes in Cargo.toml/Cargo.lock"
             exit 0
           fi
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.toml
+          git add Cargo.toml Cargo.lock
           git commit -m "chore: bump version to ${next_version} [skip ci]"
           git push origin HEAD:master
+
+  sync-development-version:
+    name: Sync version bump to development
+    runs-on: ubuntu-latest
+    needs:
+      - release
+      - bump-master-version
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+
+    steps:
+      - name: Checkout development
+        uses: actions/checkout@v6
+        with:
+          ref: development
+
+      - name: Apply same next patch version on development
+        shell: bash
+        run: |
+          current="${{ needs.release.outputs.release_version }}"
+
+          if ! [[ "$current" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Version in Cargo.toml must be semver like 1.2.3"
+            exit 1
+          fi
+
+          IFS='.' read -r major minor patch <<< "$current"
+          next_patch=$((patch + 1))
+          next_version="${major}.${minor}.${next_patch}"
+
+          echo "Current release version: ${current}"
+          echo "Syncing development to: ${next_version}"
+
+          sed -E -i "0,/^version\s*=\s*\"[^\"]+\"/s//version = \"${next_version}\"/" Cargo.toml
+          perl -0777 -i -pe 's/(\[\[package\]\]\nname = "ferrosonic"\nversion = )"[^"]+"/$1"'"${next_version}"'"/' Cargo.lock
+
+          if git diff --quiet Cargo.toml Cargo.lock; then
+            echo "Development already on version ${next_version}"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.toml Cargo.lock
+          git commit -m "chore: sync version to ${next_version} from master [skip ci]"
+          git push origin HEAD:development
