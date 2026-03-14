@@ -98,7 +98,7 @@ impl App {
             KeyCode::Char('r') => {
                 // Shuffle queue
                 use rand::seq::SliceRandom;
-                let mut rng = rand::thread_rng();
+                let mut rng = rand::rng();
 
                 if let Some(pos) = state.queue_position {
                     // Keep current song in place, shuffle the rest
