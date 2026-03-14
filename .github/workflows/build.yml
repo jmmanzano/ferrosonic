@@ -72,7 +72,27 @@ jobs:
       - name: Build release binary
         run: cargo build --release --locked
 
-      - name: Upload Windows binary to GitHub Release
+      - name: Create Windows zip artifact
+        shell: pwsh
+        run: |
+          $stageDir = "target/release/windows-package"
+          $zipPath = "target/release/ferrosonic-windows-x86_64.zip"
+
+          if (Test-Path $stageDir) {
+            Remove-Item $stageDir -Recurse -Force
+          }
+          New-Item -ItemType Directory -Path $stageDir | Out-Null
+
+          Copy-Item "target/release/ferrosonic.exe" "$stageDir/ferrosonic.exe"
+          Copy-Item "packaging/windows/install.bat" "$stageDir/install.bat"
+          Copy-Item "icons/ferrosonic.png" "$stageDir/ferrosonic.png"
+
+          if (Test-Path $zipPath) {
+            Remove-Item $zipPath -Force
+          }
+          Compress-Archive -Path "$stageDir/*" -DestinationPath $zipPath
+
+      - name: Upload Windows zip to GitHub Release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -80,7 +100,7 @@ jobs:
           $tag = "${{ needs.release.outputs.release_tag }}"
           $repo = "${{ github.repository }}"
 
-          gh release upload $tag "target/release/ferrosonic.exe#ferrosonic-windows-x86_64.exe" --repo $repo --clobber
+          gh release upload $tag "target/release/ferrosonic-windows-x86_64.zip" --repo $repo --clobber
 
   linux:
     name: Linux (binary + deb)
