@@ -262,6 +262,14 @@ pub struct SettingsState {
     pub equalizer_presets: Vec<EqualizerPreset>,
     /// Selected equalizer preset index
     pub equalizer_preset_index: usize,
+    /// Whether the user is currently editing band gains
+    pub eq_editing: bool,
+    /// Which band (0–9) is focused in edit mode
+    pub eq_selected_band: usize,
+    /// Whether the user is currently renaming the selected preset
+    pub eq_renaming: bool,
+    /// Text buffer used while renaming the selected preset
+    pub eq_rename_buffer: String,
     /// Desktop notifications when a song changes
     pub notifications_enabled: bool,
 }
@@ -282,6 +290,10 @@ impl Default for SettingsState {
                 bands: [0.0; 10],
             }],
             equalizer_preset_index: 0,
+            eq_editing: false,
+            eq_selected_band: 0,
+            eq_renaming: false,
+            eq_rename_buffer: String::new(),
             notifications_enabled: false,
         }
     }
@@ -330,6 +342,10 @@ impl SettingsState {
 
     pub fn current_equalizer_preset(&self) -> &EqualizerPreset {
         &self.equalizer_presets[self.equalizer_preset_index]
+    }
+
+    pub fn current_equalizer_preset_mut(&mut self) -> &mut EqualizerPreset {
+        &mut self.equalizer_presets[self.equalizer_preset_index]
     }
 
     pub fn next_equalizer_preset(&mut self) {

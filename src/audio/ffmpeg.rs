@@ -4,8 +4,8 @@
 use std::io::{BufReader, Read};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::sync::{mpsc, Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, Stream, StreamConfig};
@@ -44,10 +44,14 @@ impl AudioState {
         }
     }
 
-    fn begin_new_stream(&mut self) -> u64 {
+    fn begin_new_stream(&mut self, capacity: usize) -> u64 {
         self.generation = self.generation.wrapping_add(1);
-        // Clear buffer completely
-        self.buffer.fill(0.0);
+        // Resize or clear buffer
+        if self.buffer.len() != capacity {
+            self.buffer = vec![0.0; capacity];
+        } else {
+            self.buffer.fill(0.0);
+        }
         self.write_pos = 0;
         self.read_pos = 0;
         self.playing = true;
@@ -112,6 +116,10 @@ pub struct FfmpegController {
     config: Option<StreamConfig>,
     equalizer_filter: Option<String>,
     current_url: Option<String>,
+    /// Sample rate of the stream currently playing (detected via ffprobe)
+    current_sample_rate: u32,
+    /// Channel count of the stream currently playing (detected via ffprobe)
+    current_channels: u16,
 }
 
 impl FfmpegController {
@@ -128,6 +136,67 @@ impl FfmpegController {
             config: None,
             equalizer_filter: None,
             current_url: None,
+            current_sample_rate: 48000,
+            current_channels: 2,
+        }
+    }
+
+    /// Probe the native sample rate and channel count of an audio URL using ffprobe.
+    /// Returns (sample_rate, channels), falling back to (48000, 2) on any failure.
+    fn probe_audio_format(url: &str) -> (u32, u16) {
+        let url_owned = url.to_string();
+        let (tx, rx) = mpsc::channel();
+
+        std::thread::spawn(move || {
+            let result = Command::new("ffprobe")
+                .args([
+                    "-v", "quiet",
+                    "-probesize", "65536",
+                    "-analyzeduration", "0",
+                    "-select_streams", "a:0",
+                    "-show_entries", "stream=sample_rate,channels",
+                    "-of", "json",
+                    "-i", &url_owned,
+                ])
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .output();
+
+            let format = match result {
+                Ok(out) if !out.stdout.is_empty() => {
+                    std::str::from_utf8(&out.stdout)
+                        .ok()
+                        .and_then(|text| serde_json::from_str::<serde_json::Value>(text).ok())
+                        .and_then(|json| {
+                            let streams = json["streams"].as_array()?;
+                            let stream = streams.first()?;
+                            let sr = stream["sample_rate"]
+                                .as_str()
+                                .and_then(|s| s.parse::<u32>().ok())
+                                .filter(|&r| r > 0 && r <= 384000)?;
+                            let ch = stream["channels"]
+                                .as_u64()
+                                .map(|c| c as u16)
+                                .filter(|&c| c > 0 && c <= 8)?;
+                            Some((sr, ch))
+                        })
+                        .unwrap_or((48000, 2))
+                }
+                _ => (48000, 2),
+            };
+
+            let _ = tx.send(format);
+        });
+
+        match rx.recv_timeout(Duration::from_secs(5)) {
+            Ok((sr, ch)) => {
+                info!("Probed audio stream: {} Hz / {} ch", sr, ch);
+                (sr, ch)
+            }
+            Err(_) => {
+                warn!("ffprobe timed out — defaulting to 48000 Hz stereo");
+                (48000, 2)
+            }
         }
     }
 
@@ -183,6 +252,18 @@ impl FfmpegController {
         info!("FFmpeg loading: {}", url.split('?').next().unwrap_or(url));
         self.current_url = Some(url.to_string());
 
+        // Detect native audio format so we can play back without resampling
+        let (sample_rate, channels) = Self::probe_audio_format(url);
+        self.current_sample_rate = sample_rate;
+        self.current_channels = channels;
+
+        // Update CPAL config to match the detected format
+        self.config = Some(StreamConfig {
+            channels,
+            sample_rate,
+            buffer_size: cpal::BufferSize::Default,
+        });
+
         let device = self
             .device
             .as_ref()
@@ -193,10 +274,16 @@ impl FfmpegController {
             .as_ref()
             .ok_or_else(|| AudioError::MpvIpc("Audio config not initialized".to_string()))?;
 
+        // Buffer capacity scaled for ~15 s of audio at the detected format
+        let buffer_capacity = (sample_rate as usize)
+            .saturating_mul(channels as usize)
+            .saturating_mul(15)
+            .clamp(2097152, 8388608);
+
         // Reset buffer and start a fresh stream generation
         let generation = {
             let mut state = self.audio_state.lock().unwrap();
-            state.begin_new_stream()
+            state.begin_new_stream(buffer_capacity)
         };
 
         let url = url.to_string();
@@ -206,9 +293,15 @@ impl FfmpegController {
 
         // Start new decode thread
         let decode_thread = std::thread::spawn(move || {
-            if let Err(e) =
-                Self::decode_stream(&url, audio_state, generation, equalizer_filter, start_position)
-            {
+            if let Err(e) = Self::decode_stream(
+                &url,
+                audio_state,
+                generation,
+                equalizer_filter,
+                start_position,
+                sample_rate,
+                channels,
+            ) {
                 warn!("FFmpeg decode error: {}", e);
             }
         });
@@ -266,6 +359,8 @@ impl FfmpegController {
         generation: u64,
         equalizer_filter: Option<String>,
         start_position: f64,
+        sample_rate: u32,
+        channels: u16,
     ) -> Result<(), String> {
         let mut args = vec![
             "-reconnect".to_string(), "1".to_string(),
@@ -289,8 +384,8 @@ impl FfmpegController {
         args.extend([
             "-f".to_string(), "s32le".to_string(),
             "-acodec".to_string(), "pcm_s32le".to_string(),
-            "-ac".to_string(), "2".to_string(),
-            "-ar".to_string(), "48000".to_string(),
+            "-ac".to_string(), channels.to_string(),
+            "-ar".to_string(), sample_rate.to_string(),
             "-af".to_string(), filters.join(","),
         ]);
 
@@ -529,7 +624,7 @@ impl FfmpegController {
     }
 
     pub fn get_sample_rate(&self) -> Result<Option<u32>, AudioError> {
-        Ok(Some(48000))
+        Ok(Some(self.current_sample_rate))
     }
 
     pub fn get_bit_depth(&self) -> Result<Option<u32>, AudioError> {
@@ -541,7 +636,14 @@ impl FfmpegController {
     }
 
     pub fn get_channels(&self) -> Result<Option<String>, AudioError> {
-        Ok(Some("Stereo".to_string()))
+        let label = match self.current_channels {
+            1 => "Mono",
+            2 => "Stereo",
+            6 => "5.1 Surround",
+            8 => "7.1 Surround",
+            _ => "Multi-channel",
+        };
+        Ok(Some(label.to_string()))
     }
 }
 

@@ -229,11 +229,19 @@ Settings include theme selection, cava visualizer toggle, cava size adjustment, 
 
 | Key | Action |
 |---|---|
-| `Up` / `k` | Previous preset |
-| `Down` / `j` | Next preset |
-| `Left` / `h` | Cycle preset backward |
-| `Right` / `l` | Cycle preset forward |
+| `Up` / `k` | Previous preset (or previous band in edit mode) |
+| `Down` / `j` | Next preset (or next band in edit mode) |
+| `Left` / `h` | Cycle preset backward (or -0.5dB in edit mode) |
+| `Right` / `l` | Cycle preset forward (or +0.5dB in edit mode) |
+| `Shift+Left` / `Shift+Right` | -2.0dB / +2.0dB in edit mode |
 | `Enter` / `Space` | Toggle equalizer on/off |
+| `e` | Enter/exit band edit mode (save on exit) |
+| `R` | Rename selected preset |
+| `n` | Duplicate current preset with a new custom name |
+| `D` | Delete selected preset |
+| `0` | Set selected band to 0dB (edit mode) |
+| `r` | Reset all bands to 0dB (edit mode) |
+| `Esc` | Exit edit/rename mode (cancel rename, save EQ edit) |
 
 ## Mouse Support
 
@@ -270,7 +278,7 @@ Gapless preloading is implemented through MPV's internal playlist. The next trac
 
 The Now Playing widget shows:
 - Artist, album, and track title
-- Audio quality: format/codec, bit depth, sample rate, and channel layout
+- Audio quality: format/codec, bit depth, sample rate, channel layout, and bitrate (when available)
 - Visual progress bar with elapsed/total time
 
 ## Themes

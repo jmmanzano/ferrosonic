@@ -193,3 +193,60 @@ fn is_json_file(path: &Path) -> bool {
         .and_then(|ext| ext.to_str())
         .is_some_and(|ext| ext.eq_ignore_ascii_case("json"))
 }
+
+/// Save a single preset to disk (creates or overwrites the JSON file).
+pub fn save_preset(preset: &EqualizerPreset) -> Result<(), String> {
+    let dir = paths::equalizer_presets_dir()
+        .ok_or_else(|| "Cannot determine presets directory".to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let filename = sanitize_filename(&preset.name);
+    let path = dir.join(format!("{}.json", filename));
+    let data = serde_json::to_string_pretty(preset).map_err(|e| e.to_string())?;
+    std::fs::write(path, data).map_err(|e| e.to_string())
+}
+
+/// Rename a preset file by writing the new preset and removing the old file if needed.
+pub fn rename_preset(old_name: &str, new_preset: &EqualizerPreset) -> Result<(), String> {
+    let dir = paths::equalizer_presets_dir()
+        .ok_or_else(|| "Cannot determine presets directory".to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+
+    let old_path = dir.join(format!("{}.json", sanitize_filename(old_name)));
+    let new_path = dir.join(format!("{}.json", sanitize_filename(&new_preset.name)));
+
+    let data = serde_json::to_string_pretty(new_preset).map_err(|e| e.to_string())?;
+    std::fs::write(&new_path, data).map_err(|e| e.to_string())?;
+
+    if old_path != new_path && old_path.exists() {
+        std::fs::remove_file(old_path).map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
+/// Delete the JSON file for a preset by its name.
+pub fn delete_preset(name: &str) -> Result<(), String> {
+    let dir = paths::equalizer_presets_dir()
+        .ok_or_else(|| "Cannot determine presets directory".to_string())?;
+    let filename = sanitize_filename(name);
+    let path = dir.join(format!("{}.json", filename));
+    if path.exists() {
+        std::fs::remove_file(path).map_err(|e| e.to_string())
+    } else {
+        // Preset may be a built-in without a file; treat as success
+        Ok(())
+    }
+}
+
+/// Generate a unique name for a new custom preset that does not clash with existing ones.
+pub fn unique_custom_name(existing: &[EqualizerPreset]) -> String {
+    let names: std::collections::HashSet<String> =
+        existing.iter().map(|p| p.name.to_lowercase()).collect();
+    for i in 1u32.. {
+        let candidate = format!("custom_{}", i);
+        if !names.contains(&candidate) {
+            return candidate;
+        }
+    }
+    "custom".to_string()
+}
