@@ -98,6 +98,9 @@ impl Widget for NowPlayingWidget<'_> {
         if let Some(ref channels) = self.now_playing.channels {
             quality_parts.push(channels.to_string());
         }
+        if let Some(kbps) = song.bit_rate {
+            quality_parts.push(format!("{} kbps", kbps));
+        }
         let quality = quality_parts.join(" │ ");
 
         // Layout based on available height
