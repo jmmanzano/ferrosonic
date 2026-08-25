@@ -52,7 +52,7 @@ impl App {
         let slave_stdout = unsafe { std::fs::File::from_raw_fd(slave) };
         let slave_stdin = unsafe { std::fs::File::from_raw_fd(slave_stdin_fd) };
         let slave_stderr = unsafe { std::fs::File::from_raw_fd(slave_stderr_fd) };
-        let config_path = std::env::temp_dir().join("ferrosonic-cava.conf");
+        let config_path = std::env::temp_dir().join("alquife-cava.conf");
         if let Err(e) = std::fs::write(&config_path, generate_cava_config(cava_gradient, cava_horizontal_gradient)) {
             error!("Failed to write cava config: {}", e);
             return;

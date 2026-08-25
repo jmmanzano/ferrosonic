@@ -1,4 +1,4 @@
-//! Built-in theme TOML definitions seeded into ~/.config/ferrosonic/themes/
+//! Built-in theme TOML definitions seeded into ~/.config/alquife/themes/
 
 pub(super) const BUILTIN_THEMES: &[(&str, &str)] = &[
     ("monokai.toml", r##"[colors]

@@ -39,7 +39,7 @@ impl IpcStream {
         }
         #[cfg(windows)]
         {
-            // MPV on Windows exposes a named pipe, e.g. \\.\pipe\ferrosonic-mpv
+            // MPV on Windows exposes a named pipe, e.g. \\.\pipe\alquife-mpv
             let file = std::fs::OpenOptions::new()
                 .read(true)
                 .write(true)

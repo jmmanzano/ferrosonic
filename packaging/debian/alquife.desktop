@@ -1,11 +1,11 @@
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=Ferrosonic
+Name=Alquife
 GenericName=Subsonic Music Client
 Comment=Terminal-based Subsonic music client
-Exec=ferrosonic
-Icon=ferrosonic
+Exec=alquife
+Icon=alquife
 Terminal=true
 Categories=AudioVideo;Audio;Player;
 Keywords=music;subsonic;audio;terminal;

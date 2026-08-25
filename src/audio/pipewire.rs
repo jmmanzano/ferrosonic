@@ -7,7 +7,7 @@ use crate::error::AudioError;
 
 /// PipeWire sample rate controller
 pub struct PipeWireController {
-    /// Original sample rate before ferrosonic started
+    /// Original sample rate before alquife started
     original_rate: Option<u32>,
     /// Current forced sample rate
     current_rate: Option<u32>,

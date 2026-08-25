@@ -18,7 +18,7 @@ use crate::subsonic::models::Child;
 /// API version for Subsonic
 const API_VERSION: &str = "1.16.1";
 /// Client name for Subsonic
-const CLIENT_NAME: &str = "ferrosonic";
+const CLIENT_NAME: &str = "alquife";
 
 /// Build a cover art URL from config and cover art ID
 fn build_cover_art_url(config: &Config, cover_art_id: &str) -> Option<String> {
@@ -41,7 +41,7 @@ fn build_cover_art_url(config: &Config, cover_art_id: &str) -> Option<String> {
 }
 
 /// MPRIS server instance name
-const PLAYER_NAME: &str = "ferrosonic";
+const PLAYER_NAME: &str = "alquife";
 
 /// MPRIS2 player implementation
 pub struct MprisPlayer {
@@ -100,11 +100,11 @@ impl RootInterface for MprisPlayer {
     }
 
     async fn identity(&self) -> fdo::Result<String> {
-        Ok("Termsonic".to_string())
+        Ok("Alquife".to_string())
     }
 
     async fn desktop_entry(&self) -> fdo::Result<String> {
-        Ok("ferrosonic".to_string())
+        Ok("alquife".to_string())
     }
 
     async fn supported_uri_schemes(&self) -> fdo::Result<Vec<String>> {

@@ -1,10 +1,10 @@
 [package]
-name = "ferrosonic"
+name = "alquife"
 version = "0.2.8"
 edition = "2021"
-description = "A terminal-based Subsonic music client with bit-perfect audio playback"
+description = "A terminal-based Subsonic music client with FFmpeg audio playback"
 license = "MIT"
-authors = ["ferrosonic contributors"]
+authors = ["alquife contributors"]
 
 [dependencies]
 # Async runtime
@@ -83,7 +83,7 @@ tempfile = "3.27.0"
 
 [package.metadata.deb]
 assets = [
-    ["target/release/ferrosonic", "usr/bin/ferrosonic", "755"],
-    ["packaging/debian/ferrosonic.desktop", "usr/share/applications/ferrosonic.desktop", "644"],
-    ["icons/ferrosonic.png", "usr/share/icons/hicolor/256x256/apps/ferrosonic.png", "644"],
+    ["target/release/alquife", "usr/bin/alquife", "755"],
+    ["packaging/debian/alquife.desktop", "usr/share/applications/alquife.desktop", "644"],
+    ["icons/alquife.png", "usr/share/icons/hicolor/256x256/apps/alquife.png", "644"],
 ]
