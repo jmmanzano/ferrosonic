@@ -1,4 +1,4 @@
-//! Theme color definitions — file-based themes loaded from ~/.config/ferrosonic/themes/
+//! Theme color definitions — file-based themes loaded from ~/.config/alquife/themes/
 
 use std::path::Path;
 

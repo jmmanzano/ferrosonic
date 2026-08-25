@@ -1,7 +1,7 @@
-//! Termsonic - A terminal-based Subsonic music client
+//! Alquife - A terminal-based Subsonic music client
 //!
 //! Features:
-//! - Bit-perfect audio playback via MPV and PipeWire sample rate switching
+//! - Audio playback via FFmpeg and PipeWire sample rate switching
 //! - MPRIS2 desktop integration for media controls
 //! - Browse artists, albums, and playlists
 //! - Play queue with shuffle and reorder support
@@ -25,9 +25,9 @@ use crate::app::App;
 use crate::config::paths::config_dir;
 use crate::config::Config;
 
-/// Termsonic - Terminal Subsonic Music Client
+/// Alquife - Terminal Subsonic Music Client
 #[derive(Parser, Debug)]
-#[command(name = "ferrosonic")]
+#[command(name = "alquife")]
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// Path to config file
@@ -50,7 +50,7 @@ fn init_logging(verbose: bool) -> Option<tracing_appender::non_blocking::WorkerG
         return None;
     }
 
-    let log_file = log_dir.join("ferrosonic.log");
+    let log_file = log_dir.join("alquife.log");
 
     // Open log file (truncate on each run)
     let file = match File::create(&log_file) {
@@ -64,9 +64,9 @@ fn init_logging(verbose: bool) -> Option<tracing_appender::non_blocking::WorkerG
     let (non_blocking, guard) = tracing_appender::non_blocking(file);
 
     let filter = if verbose {
-        EnvFilter::new("ferrosonic=debug")
+        EnvFilter::new("alquife=debug")
     } else {
-        EnvFilter::new("ferrosonic=info")
+        EnvFilter::new("alquife=info")
     };
 
     tracing_subscriber::registry()
@@ -93,7 +93,7 @@ async fn main() -> anyhow::Result<()> {
     // Initialize file-based logging (keep guard alive for duration of program)
     let _log_guard = init_logging(args.verbose);
 
-    info!("Termsonic starting...");
+    info!("Alquife starting...");
 
     // Load configuration
     let config = match args.config {
@@ -126,6 +126,6 @@ async fn main() -> anyhow::Result<()> {
         return Err(e.into());
     }
 
-    info!("Termsonic exiting...");
+    info!("Alquife exiting...");
     Ok(())
 }

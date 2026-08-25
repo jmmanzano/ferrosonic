@@ -1,13 +1,13 @@
-# Ferrosonic
+# Alquife
 
-A terminal-based Subsonic music client written in Rust, featuring bit-perfect audio playback, gapless transitions, and full desktop integration.
+A terminal-based Subsonic music client written in Rust, featuring FFmpeg audio playback and full desktop integration.
 
-Ferrosonic is inspired by [Termsonic](https://git.sixfoisneuf.fr/termsonic/about/), the original terminal Subsonic client written in Go by [SixFoisNeuf](https://www.sixfoisneuf.fr/posts/termsonic-a-terminal-client-for-subsonic/). Ferrosonic is a ground-up rewrite in Rust with additional features including PipeWire sample rate switching for bit-perfect audio, MPRIS2 media controls, multiple color themes, and mouse support.
+Alquife is a fork of Ferrosonic, evolved to use FFmpeg exclusively for audio playback, support for radio streaming, and native Windows compilation.
 
 ## Features
 
+- **FFmpeg audio playback** - High-quality audio playback powered by FFmpeg and CPAL
 - **Bit-perfect audio** - Automatic PipeWire sample rate switching to match the source material (44.1kHz, 48kHz, 96kHz, 192kHz, etc.)
-- **Gapless playback (MPV backend)** - Seamless transitions between tracks with pre-buffered next track
 - **MPRIS2 integration** - Full desktop media control support (play, pause, stop, next, previous, seek)
 - **Artist/album browser** - Tree-based navigation with expandable artists and album listings
 - **Playlist support** - Browse and play server playlists with shuffle capability
@@ -18,10 +18,9 @@ Ferrosonic is inspired by [Termsonic](https://git.sixfoisneuf.fr/termsonic/about
 - **Non-stop mode** - When enabled, auto-extends the queue with 10 similar songs from Subsonic while the last queued track is playing
 - **Session persistence** - Restores queue and UI selection/scroll state between runs
 - **Audio quality display** - Real-time display of sample rate, bit depth, codec format, and channel layout
-- **Audio backend selection** - Choose between MPV and FFmpeg+CPAL audio backends
 - **Audio visualizer** - Integrated cava audio visualizer with theme-matched gradient colors and adjustable size
 - **13 built-in themes** - Default, Monokai, Dracula, Nord, Gruvbox, Catppuccin, Solarized, Tokyo Night, Rosé Pine, Everforest, Kanagawa, One Dark, and Ayu Dark
-- **Custom themes** - Create your own themes as TOML files in `~/.config/ferrosonic/themes/`
+- **Custom themes** - Create your own themes as TOML files in `~/.config/alquife/themes/`
 - **Mouse support** - Clickable buttons, tabs, lists, and progress bar seeking
 - **Artist filtering** - Real-time search/filter on the artist list
 - **Multi-disc album support** - Proper disc and track number display
@@ -29,18 +28,17 @@ Ferrosonic is inspired by [Termsonic](https://git.sixfoisneuf.fr/termsonic/about
 
 ## Screenshots
 
-![Ferrosonic](screenshots/ferrosonic.png)
+![Alquife](screenshots/alquife.png)
 
 ## Installation
 
 ### Dependencies
 
-Ferrosonic requires the following at runtime:
+Alquife requires the following at runtime:
 
 | Dependency | Purpose | Required |
 |---|---|---|
-| **mpv** | Audio playback engine (via JSON IPC) | Yes (default backend) |
-| **ffmpeg** | Decoder for FFmpeg audio backend | Optional (alternative backend) |
+| **ffmpeg** | Audio decoder and playback | Yes |
 | **PipeWire** | Automatic sample rate switching for bit-perfect audio | Recommended |
 | **WirePlumber** | PipeWire session manager | Recommended |
 | **D-Bus** | MPRIS2 desktop media controls | Recommended |
@@ -51,30 +49,30 @@ Ferrosonic requires the following at runtime:
 Supports Arch, Fedora, and Debian/Ubuntu. Installs runtime dependencies, downloads the latest precompiled binary, and installs to `/usr/local/bin/`:
 
 ```bash
-curl -sSf https://raw.githubusercontent.com/jaidaken/ferrosonic/master/install.sh | sh
+curl -sSf https://raw.githubusercontent.com/jmmanzano/alquife/master/install.sh | sh
 ```
 
 ### Prebuilt Release Assets
 
-- **Linux binary**: `ferrosonic-linux-x86_64`
+- **Linux binary**: `alquife-linux-x86_64`
 - **Linux Debian package**: `.deb` includes desktop entry and application icon for launcher integration
-- **Windows zip**: `ferrosonic-windows-x86_64.zip` contains:
-	- `ferrosonic.exe`
+- **Windows zip**: `alquife-windows-x86_64.zip` contains:
+	- `alquife.exe`
 	- `install.bat` (installer script)
-	- `ferrosonic.png` (shortcut icon source)
+	- `alquife.png` (shortcut icon source)
 
 The Windows installer script:
 
-- Installs to `%LOCALAPPDATA%\Ferrosonic` by default (or a custom directory passed as argument)
+- Installs to `%LOCALAPPDATA%\Alquife` by default (or a custom directory passed as argument)
 - Checks whether `ffmpeg` exists in `PATH`
 - Downloads and installs FFmpeg automatically if missing
 - Adds install and FFmpeg paths to user `PATH`
 - Creates Start Menu and Desktop shortcuts with icon
-- Launches Ferrosonic automatically after install
+- Launches Alquife automatically after install
 
 ### Windows Quick Start
 
-1. Download `ferrosonic-windows-x86_64.zip` from the latest release.
+1. Download `alquife-windows-x86_64.zip` from the latest release.
 2. Extract the zip to any folder.
 3. Run `install.bat` (double-click or execute in `cmd`/PowerShell).
 
@@ -83,28 +81,28 @@ The Windows installer script:
 If you prefer to build from source, you'll also need: Rust toolchain, pkg-config, OpenSSL dev headers, and D-Bus dev headers. Then:
 
 ```bash
-git clone https://github.com/jaidaken/ferrosonic.git
-cd ferrosonic
+git clone https://github.com/jmmanzano/alquife.git
+cd alquife
 cargo build --release
-sudo cp target/release/ferrosonic /usr/local/bin/
+sudo cp target/release/alquife /usr/local/bin/
 ```
 
 ## Usage
 
 ```bash
-# Run with default config (~/.config/ferrosonic/config.toml)
-ferrosonic
+# Run with default config (~/.config/alquife/config.toml)
+alquife
 
 # Run with a custom config file
-ferrosonic -c /path/to/config.toml
+alquife -c /path/to/config.toml
 
 # Enable verbose/debug logging
-ferrosonic -v
+alquife -v
 ```
 
 ## Configuration
 
-Configuration is stored at `~/.config/ferrosonic/config.toml`. You can edit it manually or configure the server connection through the application's Server page (F5).
+Configuration is stored at `~/.config/alquife/config.toml`. You can edit it manually or configure the server connection through the application's Server page (F5).
 
 ```toml
 BaseURL = "https://your-subsonic-server.com"
@@ -114,7 +112,6 @@ Theme = "Default"
 Cava = false
 CavaSize = 40
 NonStopMode = false
-AudioBackend = "mpv"
 ```
 
 | Field | Description |
@@ -128,7 +125,7 @@ AudioBackend = "mpv"
 | `AudioBackend` | Audio playback backend (`mpv` or `ffmpeg`) |
 | `NonStopMode` | Enable/disable Non-stop mode (`true` / `false`, default `false`) |
 
-Logs are written to `~/.config/ferrosonic/ferrosonic.log`.
+Logs are written to `~/.config/alquife/alquife.log`.
 
 ## Keyboard Shortcuts
 
@@ -283,7 +280,7 @@ The Now Playing widget shows:
 
 ## Themes
 
-Ferrosonic ships with 13 themes. On first run, the built-in themes are written as TOML files to `~/.config/ferrosonic/themes/`.
+Alquife ships with 13 themes. On first run, the built-in themes are written as TOML files to `~/.config/alquife/themes/`.
 
 | Theme | Description |
 |---|---|
@@ -305,7 +302,7 @@ Change themes with `t` from any page, from the Settings page (F6), or by editing
 
 ### Custom Themes
 
-Create a `.toml` file in `~/.config/ferrosonic/themes/` and it will appear in the theme list. The filename becomes the display name (e.g. `my-theme.toml` becomes "My Theme").
+Create a `.toml` file in `~/.config/alquife/themes/` and it will appear in the theme list. The filename becomes the display name (e.g. `my-theme.toml` becomes "My Theme").
 
 ```toml
 [colors]

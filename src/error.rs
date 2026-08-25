@@ -1,10 +1,10 @@
-//! Error types for ferrosonic
+//! Error types for alquife
 
 #![allow(dead_code)]
 
 use thiserror::Error;
 
-/// Main error type for ferrosonic
+/// Main error type for alquife
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Configuration error: {0}")]

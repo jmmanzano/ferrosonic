@@ -9,7 +9,7 @@ use super::models::*;
 use crate::error::SubsonicError;
 
 /// Client name sent to Subsonic server
-const CLIENT_NAME: &str = "ferrosonic-rs";
+const CLIENT_NAME: &str = "alquife-rs";
 /// API version we support
 const API_VERSION: &str = "1.16.1";
 

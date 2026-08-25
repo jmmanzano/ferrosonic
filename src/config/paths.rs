@@ -2,9 +2,9 @@
 
 use std::path::PathBuf;
 
-/// Get the default config directory for ferrosonic
+/// Get the default config directory for alquife
 pub fn config_dir() -> Option<PathBuf> {
-    dirs::config_dir().map(|p| p.join("ferrosonic"))
+    dirs::config_dir().map(|p| p.join("alquife"))
 }
 
 /// Get the default config file path
@@ -25,7 +25,7 @@ pub fn equalizer_presets_dir() -> Option<PathBuf> {
 /// Get the log file path
 #[allow(dead_code)]
 pub fn log_file() -> Option<PathBuf> {
-    config_dir().map(|p| p.join("ferrosonic.log"))
+    config_dir().map(|p| p.join("alquife.log"))
 }
 
 /// Get persisted queue snapshot file path
@@ -40,20 +40,20 @@ pub fn ui_state_file() -> Option<PathBuf> {
 
 /// Get the MPV socket path
 /// On Unix: a regular Unix domain socket in the temp directory.
-/// On Windows: a named pipe path (\\.\.\pipe\ferrosonic-mpv).
+/// On Windows: a named pipe path (\\.\.\pipe\alquife-mpv).
 pub fn mpv_socket_path() -> std::path::PathBuf {
     #[cfg(unix)]
     {
-        std::env::temp_dir().join("ferrosonic-mpv.sock")
+        std::env::temp_dir().join("alquife-mpv.sock")
     }
     #[cfg(windows)]
     {
         // MPV on Windows uses a named pipe for IPC
-        std::path::PathBuf::from(r"\\.\pipe\ferrosonic-mpv")
+        std::path::PathBuf::from(r"\\.\pipe\alquife-mpv")
     }
     #[cfg(not(any(unix, windows)))]
     {
-        std::env::temp_dir().join("ferrosonic-mpv.sock")
+        std::env::temp_dir().join("alquife-mpv.sock")
     }
 }
 
